@@ -161,6 +161,7 @@ async function preview() {
   let sheet = await readSheet();
   const base = setting("baseline").map(r=>setting('privacySchema')===3?r:{...r,notes:'',properties:''});
   const selected = sheet.rows.filter(r=>Object.hasOwn(mapping,r.owner));
+  if(selected.some(r=>(sheet.unassignedCarriers??[]).includes(r.id)))throw Error('Assign a real carrier to carried party loot on the website before syncing.');
   if(sheet.locations && selected.some(r=>!sheet.locations.includes(r.storage))) throw Error('Use Manage locations to register each storage location first.');
   if(selected.some(r=>r.kind==='wallet'&&['pp','gp','sp','cp'].some(k=>r[k]===null)))throw Error('Fill in the unrecorded coin balances in Wallets before syncing these owners.');
   const beforePrivate=sheet.rows,refs=setting("refs"), local = snapshot(mapping,selected,base,refs);

@@ -59,3 +59,15 @@ For a complete account/session/trade backup, stop the server and copy its whole 
 ## Checks
 
 From the server archive root: `node --test web-portal/tests/*.test.mjs`. From the full source repository: `node --test tests/*.test.mjs web-portal/tests/*.test.mjs`. Automated checks cover role separation, stale writes, estimates/reveals, invitations, password hashing, CSRF, CORS, public exports, lookups, transfers and the Foundry bridge. The local GM/player pages are also checked in a browser. Internet hosting and live Foundry sync need a test on the target installation.
+
+## Version 0.6: players, review and journals
+
+Use **Players & accounts → Invite player** to let a player choose an available character. The GM desk setting **Require GM approval for character selection** sends selections to **Review queue** before granting editing access; existing assignments are retained. **View as player** is a read-only preview that excludes the player's private notes. **My settings** controls display name, preferred inventory, row spacing and use confirmations.
+
+Drag an item's grip onto a character to open a quantity and ownership confirmation, or use **View item → Hand over / trade**. Handing over to carry preserves legal ownership; giving/allocating changes it. Players' offers await acceptance, and party claims need GM approval. **Party Loot** lists party-owned gear wherever it is carried or stored. Weight counts against the physical carrier. Existing carried Party Loot without a carrier must be assigned to a real character before Foundry sync.
+
+**(!)** means an item has no approved source/custom status, or its approved public details differ. Choose a source/variant or propose a custom item; player proposals go to the GM review queue. Nothing is automatically trusted from a name match. Public weight updates on approval; estimated price remains independently editable. Actual value stays GM-only unless explicitly revealed. Source descriptions and links are shared only with explicit GM approval. Full rules remain on the linked source page.
+
+**View item** shows known details and personal item notes. GM item configuration chooses whether **Use item** spends charges or quantity; unknown modes are disabled. **Journal & sessions** provides personal notes with optional links to items, characters, locations and GM-created sessions. Every note is private to its author by default, including from GM accounts through the app; sharing is per note. The PC/database owner can access the underlying database, so this is application privacy, not end-to-end encryption. Shared notes are visible to signed-in campaign members.
+
+**Change log** shows GM activity with before/after inventory changes. Personal note events record activity/sharing metadata, never note text. Portable inventory JSON excludes personal notes, accounts and settings. Back up the complete SQLite data directory to preserve these. Existing items, IDs, wallets, grants and accounts migrate in place.

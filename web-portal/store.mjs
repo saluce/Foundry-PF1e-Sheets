@@ -4,6 +4,7 @@ import {mkdirSync,chmodSync,copyFileSync} from 'node:fs';
 import path from 'node:path';
 import {normalize} from '../scripts/core.mjs';
 import {cleanGMRecord} from '../scripts/privacy.mjs';
+import {installFeatures} from './features.mjs';
 
 export class Problem extends Error {constructor(message,status=400){super(message);this.status=status;}}
 export const fail=(message,status=400)=>{throw new Problem(message,status);};
@@ -34,6 +35,7 @@ export class Ledger {
       CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT,at TEXT NOT NULL,actor TEXT NOT NULL,action TEXT NOT NULL,body TEXT NOT NULL);`);
     for(const [k,v]of Object.entries({binding:randomUUID(),world:'',revision:'0',gmRevision:'0',title:'Party Ledger',bridgeHash:'',origins:'[]'}))this.db.prepare('INSERT OR IGNORE INTO meta VALUES (?,?)').run(k,v);
     this.db.prepare('INSERT OR IGNORE INTO locations VALUES (?)').run('Carried');
+    this.initFeatures();
   }
   get(k){return this.db.prepare('SELECT value FROM meta WHERE key=?').get(k)?.value;}
   set(k,v){this.db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)').run(k,String(v));}
@@ -79,3 +81,4 @@ export class Ledger {
   exportBundle(){return {schema:1,title:this.get('title'),owners:this.owners(),locations:this.locations(),rows:this.rows().map(({version,...r})=>r),privateRecords:this.db.prepare('SELECT body FROM private_rows').all().map(r=>JSON.parse(r.body)),migrationReview:JSON.parse(this.get('review')||'[]'),lineages:this.db.prepare('SELECT source_id AS sourceId,target_id AS targetId FROM lineages').all().map(({sourceId,targetId})=>({sourceId,targetId}))};}
   close(){this.db.close();}
 }
+installFeatures(Ledger,{fail,text,hash});

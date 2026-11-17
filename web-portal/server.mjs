@@ -7,6 +7,7 @@ import {execFile} from 'node:child_process';
 import {Ledger,Problem,fail,hash,secret,text,passwordOK,passwordHash} from './store.mjs';
 import {bridge} from './bridge.mjs';
 import * as lookup from './lookup-service.mjs';
+import {featureGet,featurePost} from './feature-routes.mjs';
 const STATIC=fileURLToPath(new URL('./public/',import.meta.url));
 const now=()=>Date.now();
 const cookieName='party_session';
@@ -18,10 +19,10 @@ export function createPortal({dataDir,dbFile,origin='',lookupService=lookup}={})
   if(canonical){const u=new URL(canonical);if(u.pathname!=='/'||u.search||u.hash||u.username||u.password)throw Error('PORTAL_ORIGIN must be just an origin, for example https://loot.example.com');if(u.protocol!=='https:'&&!['127.0.0.1','localhost'].includes(u.hostname))throw Error('Remote access requires an HTTPS origin.');canonical=u.origin;}
   const rates=new Map();
   function limit(key,max,window=60000){const time=now(),r=rates.get(key);if(r&&r.until>time){if(++r.n>max)fail('Too many attempts. Please wait and try again.',429);}else rates.set(key,{n:1,until:time+window});if(rates.size>5000)for(const [k,v]of rates)if(v.until<time)rates.delete(k);}
-  function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);if(!token)return null;return ledger.db.prepare('SELECT u.*,s.csrf,s.token AS sessionToken FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>? AND u.disabled=0').get(hash(token),now());}
+  function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);if(!token)return null;return ledger.db.prepare('SELECT u.*,s.csrf,s.token AS sessionToken,s.view_as FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>? AND u.disabled=0').get(hash(token),now());}
   function json(res,value,status=200,headers={}){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8',...headers});res.end(JSON.stringify(value));}
   async function body(req){const len=Number(req.headers['content-length']);if(req.headers['content-length']!==undefined&&(!Number.isFinite(len)||len<1||len>3000000))fail('Request is empty or too large.',413);const chunks=[];let bytes=0;for await(const part of req){bytes+=part.length;if(bytes>3000000)fail('Request too large.',413);chunks.push(part);}try{const value=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(!value||typeof value!=='object'||Array.isArray(value))fail('Invalid request.');return value;}catch(err){if(err instanceof Problem)throw err;fail('Invalid JSON request.');}}
-  function login(res,user){const token=secret(),csrf=secret();ledger.db.prepare('DELETE FROM sessions WHERE expires<?').run(now());ledger.db.prepare('INSERT INTO sessions VALUES (?,?,?,?)').run(hash(token),user.id,csrf,now()+12*3600000);json(res,{ok:true,user:ledger.publicUser(user),csrf},200,{'Set-Cookie':`${cookieName}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${canonical.startsWith('https:')?'; Secure':''}`});}
+  function login(res,user){const token=secret(),csrf=secret();ledger.db.prepare('DELETE FROM sessions WHERE expires<?').run(now());ledger.db.prepare('INSERT INTO sessions(token,user_id,csrf,expires) VALUES (?,?,?,?)').run(hash(token),user.id,csrf,now()+12*3600000);json(res,{ok:true,user:ledger.publicUser(user),csrf},200,{'Set-Cookie':`${cookieName}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${canonical.startsWith('https:')?'; Secure':''}`});}
   const server=http.createServer(async(req,res)=>{
     res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','DENY');res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     try{
@@ -39,15 +40,17 @@ export function createPortal({dataDir,dbFile,origin='',lookupService=lookup}={})
         json(res,bridge(ledger,data));return;
       }
       if(req.method==='GET'&&!route.startsWith('/api/')){
-        const files={'/':['index.html','text/html'],'/app.mjs':['app.mjs','text/javascript'],'/style.css':['style.css','text/css'],'/favicon.svg':['favicon.svg','image/svg+xml']};const selected=files[route];if(!selected)fail('Page not found.',404);res.writeHead(200,{'Content-Type':selected[1]+'; charset=utf-8'});res.end(fs.readFileSync(path.join(STATIC,selected[0])));return;
+        const files={'/':['index.html','text/html'],'/app.mjs':['app.mjs','text/javascript'],'/features.mjs':['features.mjs','text/javascript'],'/style.css':['style.css','text/css'],'/favicon.svg':['favicon.svg','image/svg+xml']};const selected=files[route];if(!selected)fail('Page not found.',404);res.writeHead(200,{'Content-Type':selected[1]+'; charset=utf-8'});res.end(fs.readFileSync(path.join(STATIC,selected[0])));return;
       }
       if(req.method==='GET'&&route==='/api/status'){json(res,{application:'pf1-party-ledger',needsSetup:!!bootstrapToken});return;}
       const user=session(req);
+      const preview=user?.role==='gm'&&user.view_as?ledger.db.prepare("SELECT * FROM users WHERE id=? AND role='player'").get(user.view_as):null,effective=preview||user;
       if(req.method==='GET'){
         if(!user)fail('Please sign in.',401);
-        if(route==='/api/state'){json(res,{...ledger.publicState(user),csrf:user.csrf});return;}
-        if(route==='/api/admin'){ledger.gm(user);json(res,{users:ledger.db.prepare('SELECT id,username,role,disabled FROM users').all().map(u=>({...u,owners:ledger.grantOwners(u)})),origins:JSON.parse(ledger.get('origins')),bridgeConfigured:!!ledger.get('bridgeHash'),world:ledger.get('world')});return;}
-        if(route==='/api/backup'){ledger.gm(user);json(res,ledger.exportBundle(),200,{'Content-Disposition':'attachment; filename="private-ledger-backup.json"'});return;}
+        if(route==='/api/state'){json(res,{...ledger.publicState(effective,{preview:!!preview}),preview:preview?{username:preview.username,readOnly:true}:null,csrf:user.csrf});return;}
+        if(featureGet({route,ledger,user,effective,preview:!!preview,json:value=>json(res,value)}))return;
+        if(route==='/api/admin'){ledger.gm(effective);json(res,{users:ledger.db.prepare('SELECT id,username,role,disabled FROM users').all().map(u=>({...u,owners:ledger.grantOwners(u)})),origins:JSON.parse(ledger.get('origins')),bridgeConfigured:!!ledger.get('bridgeHash'),world:ledger.get('world')});return;}
+        if(route==='/api/backup'){ledger.gm(effective);json(res,ledger.exportBundle(),200,{'Content-Disposition':'attachment; filename="private-ledger-backup.json"'});return;}
         if(route==='/api/export'){const escape=v=>{let s=String(v??'');if(/^[\s\uFEFF]*[=+@-]/.test(s)||/^[\t\r\n]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';};const rows=ledger.rows(),keys=['id','kind','owner','name','quantity','uses','weight','price','storage','notes','properties','pp','gp','sp','cp'];res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="player-inventory.csv"'});res.end([keys,...rows.map(r=>keys.map(k=>r[k]))].map(r=>r.map(escape).join(',')).join('\r\n'));return;}
         fail('Not found.',404);
       }
@@ -55,17 +58,21 @@ export function createPortal({dataDir,dbFile,origin='',lookupService=lookup}={})
       if(req.headers.origin!==expected&&!(expected===localOrigin&&req.headers.origin===`http://localhost:${server.address()?.port}`))fail('Open this page from its normal address and try again.',403);
       if(!String(req.headers['content-type']||'').startsWith('application/json'))fail('Use a JSON request.',415);
       const data=await body(req);
+      if(route==='/api/invite-info'){limit('invite-info:'+req.socket.remoteAddress,60);json(res,ledger.characterChoices(data.token));return;}
       if(route==='/api/setup'){limit('setup:'+req.socket.remoteAddress,8);if(!bootstrapToken||hash(data.token)!==hash(bootstrapToken))fail('Use the private first-run setup link from this PC.',403);const next=ledger.transaction(()=>ledger.addUser(data.username,data.password,'gm'));bootstrapToken=null;ledger.audit(next.id,'create GM account',{});login(res,next);return;}
       if(route==='/api/login'){limit('login:'+req.socket.remoteAddress,10,300000);const account=ledger.db.prepare('SELECT * FROM users WHERE username=? AND disabled=0').get(String(data.username||'').slice(0,60));const dummy='00000000000000000000000000000000:1336b3d36c9f716c9909dd04361ef799d2f922db9e0b3d171c43323e570fdc19464ba651abca4b9a86617fae0f726e9a1edec1bbf31e04ddb5d4b806348d6bc2f';if(!passwordOK(data.password,account?.password||dummy)||!account)fail('Account name or password is incorrect.',401);login(res,account);return;}
-      if(route==='/api/join'){limit('join:'+req.socket.remoteAddress,10,300000);const invite=ledger.db.prepare('SELECT * FROM invites WHERE token=? AND expires>?').get(hash(data.token),now());if(!invite)fail('That invitation is invalid or expired.',403);const next=ledger.transaction(()=>{const created=ledger.addUser(data.username,data.password,'player',JSON.parse(invite.owners));ledger.db.prepare('DELETE FROM invites WHERE token=?').run(hash(data.token));return created;});ledger.audit(next.id,'accept invitation',{});login(res,next);return;}
+      if(route==='/api/join'){limit('join:'+req.socket.remoteAddress,10,300000);const choices=ledger.characterChoices(data.token),next=ledger.joinInvitation(data.token,data.username,data.password,data.character||(choices.characters.length===1?choices.characters[0]:null));ledger.audit(next.id,'accept invitation',{});login(res,next);return;}
       if(!user)fail('Please sign in.',401);if(req.headers['x-csrf-token']!==user.csrf)fail('Refresh the page before saving.',403);
       if(route==='/api/logout'){ledger.db.prepare('DELETE FROM sessions WHERE token=?').run(user.sessionToken);json(res,{ok:true},200,{'Set-Cookie':`${cookieName}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${canonical.startsWith('https:')?'; Secure':''}`});return;}
+      if(route==='/api/preview'){ledger.gm(user);if(data.userId!==null&&!ledger.db.prepare("SELECT id FROM users WHERE id=? AND role='player'").get(data.userId))fail('Choose a player account.');ledger.db.prepare('UPDATE sessions SET view_as=? WHERE token=?').run(data.userId,user.sessionToken);json(res,{ok:true});return;}
+      if(preview)fail('Player preview is read-only. Exit the preview to make changes.',403);
+      if(await featurePost({route,data:{...data,_origin:expected},ledger,user,json:value=>json(res,value),lookupService,limit}))return;
       if(route==='/api/password'){if(!passwordOK(data.current,user.password))fail('Current password is incorrect.',403);ledger.db.prepare('UPDATE users SET password=? WHERE id=?').run(passwordHash(data.password),user.id);ledger.db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);login(res,user);return;}
       if(route==='/api/edit'){ledger.edit(user,data.id,data.changes,data.version);}
       else if(route==='/api/private'){ledger.editPrivate(user,data.id,data.changes,data.version);}
       else if(route==='/api/reveal'){ledger.reveal(user,data.id,data.fields,data.version);}
       else if(route==='/api/add'){ledger.addRow(user,data.row);}
-      else if(route==='/api/trade'){const trade=ledger.offer(user,data.id,data.recipient,data.quantity,data.storage,data.version,data.claim===true);json(res,{ok:true,trade});return;}
+      else if(route==='/api/trade'){const trade=ledger.offer(user,data.id,data.recipient,data.quantity,data.storage,data.version,data.claim===true,data.mode||'give');json(res,{ok:true,trade});return;}
       else if(route==='/api/trade/answer'){ledger.answer(user,data.id,data.decision);}
       else if(route==='/api/locations'){ledger.setLocations(user,data.locations);}
       else if(route==='/api/inventory'){ledger.addInventory(user,data.name);}

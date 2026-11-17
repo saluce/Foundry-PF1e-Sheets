@@ -10,10 +10,11 @@ export function bridge(ledger,body){
       case 'commit':{
         if(body.revision!==before.revision)fail('The website changed. Preview again.',409);
         if(!Array.isArray(body.rows)||body.rows.length>10000)fail('Invalid inventory rows.');const rows=body.rows.map(cleanRow),ids=new Set(),wallets=new Set();
+        if(rows.some(r=>r.kind==='item'&&r.owner==='Party Loot'&&r.storage==='Carried'))fail('Assign a real carrier to carried party loot on the website before syncing.',409);
         for(const row of rows){if(ids.has(row.id))fail('Duplicate item ID.');ids.add(row.id);if(!ledger.owners().includes(row.owner)||!ledger.locations().includes(row.storage))fail('Unknown owner or location.');if(row.kind==='wallet'){const key=JSON.stringify([row.owner,row.storage]);if(wallets.has(key))fail('Duplicate wallet.');wallets.add(key);}}
         ledger.audit('Foundry','pre-sync recovery',ledger.exportBundle());
-        for(const row of rows){const old=ledger.db.prepare('SELECT body FROM rows WHERE id=?').get(row.id);if(!old||old.body!==JSON.stringify(row))ledger.putRow(row);if(row.kind==='item'){const p=ledger.privateRow(row.id);if(p)ledger.putPrivate({...p,owner:row.owner});else ledger.putPrivate({id:row.id,owner:row.owner,trueName:row.name,actualValue:null});}}
-        for(const old of ledger.rows())if(!ids.has(old.id))ledger.db.prepare('DELETE FROM rows WHERE id=?').run(old.id);
+        for(const row of rows){const old=ledger.db.prepare('SELECT body FROM rows WHERE id=?').get(row.id);if(!old||old.body!==JSON.stringify(row)){if(old)ledger.prepareFoundryRow?.(JSON.parse(old.body),row);ledger.putRow(row);ledger.audit('Foundry',old?'synced item change':'synced new item',{id:row.id,before:old?JSON.parse(old.body):null,after:row});}if(row.kind==='item'){const p=ledger.privateRow(row.id);if(p)ledger.putPrivate({...p,owner:row.owner});else ledger.putPrivate({id:row.id,owner:row.owner,trueName:row.name,actualValue:null});}}
+        for(const old of ledger.rows())if(!ids.has(old.id)){ledger.audit('Foundry','synced removed item',{id:old.id,before:old,after:null});ledger.db.prepare('DELETE FROM rows WHERE id=?').run(old.id);}
         ledger.bump();ledger.bump(true);break;
       }
       case 'locations':ledger.setLocations({role:'gm',id:'Foundry'},body.locations);break;
@@ -27,7 +28,7 @@ export function bridge(ledger,body){
         if(changed)ledger.bump(true);break;
       }
       case 'clonePrivate':{
-        const p=ledger.privateRow(body.sourceId);if(!p)fail('Preserve the private record before splitting.');const id=String(body.targetId||'');if(!id||id.length>256)fail('Invalid target item ID.');if(!ledger.privateRow(id)){ledger.putPrivate({...p,id});ledger.bump(true);}break;
+        const p=ledger.privateRow(body.sourceId);if(!p)fail('Preserve the private record before splitting.');const id=String(body.targetId||'');if(!id||id.length>256)fail('Invalid target item ID.');if(!ledger.privateRow(id)){ledger.putPrivate({...p,id});if(ledger.details&&ledger.saveDetails)ledger.saveDetails(id,ledger.details(body.sourceId));ledger.bump(true);}break;
       }
       case 'reveal':{
         if(body.revision!==before.revision||body.gmRevision!==before.gmRevision)fail('The ledger changed. Reload before revealing.',409);ledger.reveal({role:'gm',id:'Foundry'},body.id,body.fields,ledger.row(body.id).version);break;

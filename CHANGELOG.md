@@ -1,14 +1,20 @@
 # Changelog
 
+## 0.6.0
+
+- Character selection on invitations, optional GM approval, personal settings and read-only player previews.
+- Confirmed drag-and-drop handoffs, separate ownership/carrier and party loot overview.
+- Reviewed source matches/custom items, known descriptions and charge/quantity use.
+- Private personal item/journal notes with optional sharing and links to items, characters, places and sessions.
+- GM review queue and before/after activity log without private personal note text.
+
 ## 0.5.2
 
-- Dedicated GM Players and accounts page for invitations, character assignments and account status.
-- Direct navigation from the GM sidebar and dashboard.
+- Dedicated GM player account and character assignment dashboard.
 
 ## 0.5.1
 
-- Show/Hide password buttons on sign-in, account setup, invitations and password-change forms.
-- Keep submit actions separate from visibility controls.
+- Show/hide password controls.
 
 ## 0.5.0
 
