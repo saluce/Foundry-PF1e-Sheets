@@ -1,9 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- Confirmed d20PFSRD name search and source URL lookup for weights and prices.
+- Private actual prices by default, explicit public known prices, variant selection and pack conversion.
+- Private lookup provenance and stale-source protection.
+
 ## 0.3.1
 
-- Fix setup and location updates on imported native Google Sheets tables by avoiding overlapping basic filters.
-- Add a regression check for native-table setup.
+- Fix overlapping basic filters during native-table setup.
 
 ## 0.3.0
 
@@ -17,4 +22,3 @@
 ## 0.2.0
 
 - Named storage locations, separate wallets, loot distribution and two-way sync.
-

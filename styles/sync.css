@@ -6,3 +6,5 @@
 .pf1-sync .scroll { max-height:370px; overflow:auto; }
 .pf1-sync .hint { opacity:.8; }
 .pf1-sync-button { margin:4px 0; }
+.pf1-sync-dialog .dialog-buttons { flex-wrap:wrap; gap:4px; }
+.pf1-sync-dialog .dialog-button { flex:1 1 160px; white-space:normal; }

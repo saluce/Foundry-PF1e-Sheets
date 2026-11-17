@@ -2,6 +2,7 @@ import {ID, escapeHTML as e, indexRows, reconcile, resolvePlan, convertLegacy, s
 import {assertGM, mappedActors, snapshot, validateApply, applyRows} from "./foundry.mjs";
 import {tradeDialog} from "./trade.mjs";
 import {publicState,cleanGMRecord,migratedPrivate} from './privacy.mjs';
+import {lookupDialog} from './lookup.mjs';
 
 let busy = false;
 const perWorld = new Set(["baseline","refs","binding","privacySchema"]);
@@ -12,7 +13,7 @@ const setting = key => {
 const save = (key,value) => game.settings.set(ID,key,perWorld.has(key)?{...game.settings.get(ID,key),[game.world.id]:value}:value);
 function notifyError(err) { console.error(`${ID} | Operation failed; private payloads are not logged.`); ui.notifications.error(err.message); }
 function dialog(title, content, buttons, width = 720) {
-  return new Dialog({title,content:`<div class="pf1-sync">${content}</div>`,buttons}, {width}).render(true);
+  return new Dialog({title,content:`<div class="pf1-sync">${content}</div>`,buttons}, {width,classes:['dialog','pf1-sync-dialog']}).render(true);
 }
 const root = html => html instanceof HTMLElement ? html : html[0];
 async function exclusive(fn) {
@@ -31,7 +32,10 @@ async function request(action, extra = {}) {
   if (!response.ok) throw Error(`Google Sheets returned HTTP ${response.status}.`);
   let data;
   try { data = await response.json(); } catch { throw Error("Google returned a sign-in page instead of data. Check the web-app deployment and Anyone access."); }
-  if (!data.ok) throw Error(data.error || "The sheet connection failed.");
+  if (!data.ok) {
+    if(action.startsWith('lookup')&&data.error==='Unknown action.')throw Error('Update Code.gs to version 0.4 and deploy a new web-app version before using item lookup.');
+    throw Error(data.error || "The sheet connection failed.");
+  }
   return data;
 }
 
@@ -61,11 +65,14 @@ function openPanel() {
     sync:{label:"Preview sync",callback:()=>exclusive(preview).catch(notifyError)},
     trade:{label:"Distribute loot",callback:()=>readSheet().then(s=>tradeDialog(exclusive,s.locations,prepareTransfer)).catch(notifyError)},
     secrets:{label:'GM item details / reveal',callback:()=>chooseGMItem().catch(notifyError)},
+    lookup:{label:'Look up item (d20PFSRD)',callback:()=>openLookup().catch(notifyError)},
+    missing:{label:'Check missing weights / values',callback:()=>openLookup(true).catch(notifyError)},
     locations:{label:"Manage locations (GM)",callback:()=>manageLocations().catch(notifyError)},
     legacy:{label:"Convert old tab (CSV)",callback:()=>legacyDialog()},
     close:{label:"Close"}
   });
 }
+const openLookup=lookupDialog({readSheet,request,dialog,root,exclusive,notifyError});
 async function readSheet() {
   const data = publicState(await request("read"));
   if (setting('privacySchema')===3 && setting("binding") && setting("binding") !== data.binding) throw Error("This world was paired with another sheet. Restore the original connection.");

@@ -1,4 +1,4 @@
-# PF1 Inventory · Sheets Sync 0.3
+# PF1 Inventory · Sheets Sync 0.4
 
 For Foundry VTT 13 and Pathfinder 1e 11.x. Review inventory changes, distribute loot, and manage named banks and separate wallets.
 
@@ -51,4 +51,16 @@ Keep the project, binding and IDs after pairing. Update the web-app deployment t
 
 ## Tests
 
-Run `node --test tests/*.test.mjs` in the public repository. Thirty checks cover reconciliation, transfers, locations, permission failures, private migration and selective reveals. Public templates and release assets contain no campaign data.
+Run `node --test tests/*.test.mjs` in the public repository. Automated checks cover reconciliation, transfers, locations, permission failures, private migration, selective reveals and confirmed item lookup. Public templates and release assets contain no campaign data.
+
+## Item weight and value lookup (0.4)
+
+Update the Foundry module, replace Code.gs in your existing private script project with this release's Code.gs, save, then Deploy → Manage deployments → pencil → New version → Deploy. Keep your existing script properties, TOKEN, Drive service and appsscript.json. The spreadsheet schema is unchanged; do not create new workbooks or reset item IDs.
+
+In Inventory · Sheets Sync select **Look up item (d20PFSRD)**. Choose an item and search its name, optionally correcting spelling or pasting a specific HTTPS d20PFSRD URL. Choose an exact match, review its source link, and select the price variant and fields to fill. Nothing is written until **Fill selected fields**.
+
+Prices are full purchase prices in gp and weights are pounds. Price defaults to the private GM actual value. Choose **Public known value — item is identified** only when players should know it; this also updates the private actual value. Weight is public when selected. Names, quantities, uses, properties and notes are not changed. **Preview sync** afterwards updates Foundry.
+
+Set **Units per listed pack** to 10 for a source price/weight describing ten individual bolts, or leave 1 when your inventory quantity counts whole packs. Both selected values are divided by this number. Do not divide twice. Check size, material, enhancement and remaining charges: the tool does not calculate custom magic prices, resize equipment, or depreciate charged items. Unknown/formula prices stay blank. d20PFSRD search is incomplete; try the exact item URL if a match is missing. Third-party matches are labelled by source path. Site downtime or changed HTML can prevent extraction.
+
+**Check missing weights / values** opens a filtered list for review one item at a time. It does not run unattended bulk changes. Confirmed source URLs, unit values and pack sizes are recorded in the private workbook's _Lookups tab; private item URLs are not written to player notes. Item names entered in search are sent to d20PFSRD. No API key is required.
