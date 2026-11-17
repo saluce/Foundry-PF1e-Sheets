@@ -58,6 +58,16 @@ test('public normalization drops private keys and preserves unrecorded coin bala
   assert.ok(!JSON.stringify(data).includes(SECRET));assert.ok(!JSON.stringify(data).includes(TRUE_NAME));assert.equal(data.rows[1].pp,null);
   assert.throws(()=>publicState({schema:2}),/private standalone/);
 });
+
+test('location setup preserves native tables without adding overlapping basic filters',()=>{
+  const b=bridge();
+  for(const name of ['Hero','Party Loot'])b.pub.getSheetByName(name).getFilter=()=>{throw Error('Native tables do not use basic filters');};
+  const result=b.call({action:'locations',locations:['Carried','Town Bank','Vault']});
+  assert.equal(result.ok,true);
+  assert.ok(result.locations.includes('Vault'));
+  assert.equal(b.pub.getSheetByName('Hero').filter,false);
+  assert.equal(b.pub.getSheetByName('Hero').grid[6][0],'r1');
+});
 test('reveals are independent; private notes are never a revealable field',()=>{
   const name=revealedRow(pubItem(),gmRecord,['name']);assert.equal(name.name,TRUE_NAME);assert.equal(name.price,25);assert.equal(name.properties,'');
   assert.equal(revealedRow(pubItem(),{...gmRecord,actualValue:0},['price']).price,0);

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Fix setup and location updates on imported native Google Sheets tables by avoiding overlapping basic filters.
+- Add a regression check for native-table setup.
+
 ## 0.3.0
 
 - Editable character tabs with grouped details and separate party loot.
@@ -12,3 +17,4 @@
 ## 0.2.0
 
 - Named storage locations, separate wallets, loot distribution and two-way sync.
+
