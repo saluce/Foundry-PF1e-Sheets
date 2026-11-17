@@ -20,7 +20,7 @@ function patch(obj,changes) {
   for(const [path,value] of Object.entries(changes)) {
     if(path==='_id') continue;
     const keys=path.split('.');let t=obj;
-    for(const k of keys.slice(0,-1)) t=t[k]??={};t[keys.at(-1)]=copy(value);
+    for(const k of keys.slice(0,-1)) t=t[k]??={};if(keys.at(-1).startsWith('-='))delete t[keys.at(-1).slice(2)];else t[keys.at(-1)]=copy(value);
   }
 }
 class FakeActor {
@@ -37,7 +37,7 @@ function world(actors) {
   for(const a of actors) a.items[Symbol.iterator]=a.items.values.bind(a.items);
   globalThis.game={user:{isGM:true},system:{id:'pf1'},version:'13.351',actors:new Map(actors.map(a=>[a.id,a]))};
 }
-function native(overrides={}) {return {_id:'w1',name:'Wand',type:'consumable',system:{quantity:2,price:100,weight:1,carried:true,uses:{per:'charges',value:28,max:50},actions:[{name:'Shock',formula:'1d6'}]},flags:{[ID]:{rowId:'r1',notes:'Keep its magic',sell:false}},...overrides};}
+function native(overrides={}) {return {_id:'w1',name:'Wand',type:'consumable',system:{quantity:2,price:100,weight:1,carried:true,uses:{per:'charges',value:28,max:50},actions:[{name:'Shock',formula:'1d6'}]},flags:{[ID]:{rowId:'r1',publicNotes:'Keep its magic',sell:false}},...overrides};}
 
 test('independent field edits merge both ways',()=>{
   const b=item(),l=item({quantity:1}),r=item({notes:'Sell later'});
@@ -164,7 +164,7 @@ function bridge() {
     LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})},
     ContentService:{MimeType:{JSON:1},createTextOutput:t=>({setMimeType:()=>t})}
   });
-  vm.runInContext(fs.readFileSync(new URL('../google-apps-script/Code.gs',import.meta.url),'utf8'),ctx);
+  vm.runInContext(fs.readFileSync(new URL('./fixtures/legacy-bridge.txt',import.meta.url),'utf8'),ctx);
   return {ctx,sheets,call:payload=>JSON.parse(ctx.doPost({postData:{contents:JSON.stringify({token:'secret',world:'world',...payload})}}))};
 }
 test('bridge authenticates, assigns IDs, detects edits and routes party loot separately',()=>{
@@ -192,12 +192,12 @@ test('bridge rejects invalid rows and formula-looking text is written as literal
 });
 test('named banks retain independent wallets and item locations across syncs',async()=>{
   const actor=new FakeActor('pc');world([actor]);const mapping={ExampleHero:'pc'};
-  const rows=[item({owner:'ExampleHero',storage:'Wati Bank'}),wallet({id:'wati',storage:'Wati Bank',gp:154}),wallet({id:'other',storage:'Magnimar Bank',gp:22})];
+  const rows=[item({owner:'ExampleHero',storage:'Town Bank'}),wallet({id:'wati',storage:'Town Bank',gp:154}),wallet({id:'other',storage:'Magnimar Bank',gp:22})];
   await applyRows(rows,mapping,new Map());
   let actual=snapshot(mapping,rows,rows).rows;
   assert.equal(actual.find(r=>r.id==='wati').gp,154);
   assert.equal(actual.find(r=>r.id==='other').gp,22);
-  assert.equal(actual.find(r=>r.id==='r1').storage,'Wati Bank');
+  assert.equal(actual.find(r=>r.id==='r1').storage,'Town Bank');
   assert.equal(actor.data.system.currency.gp,0);
   const renamed=actual.map(r=>r.id==='wati'?{...r,storage:'Wati Treasury'}:r);
   await applyRows(renamed,mapping,snapshot(mapping,rows,rows).links);
@@ -206,27 +206,27 @@ test('named banks retain independent wallets and item locations across syncs',as
   assert.equal(actual.filter(r=>r.kind==='wallet'&&r.storage!=='Carried').length,2);
 });
 test('withdrawing a bank item makes it carried for the recipient',async()=>{
-  const data=native();data.system.carried=false;data.flags[ID].storage='Wati Bank';
+  const data=native();data.system.carried=false;data.flags[ID].storage='Town Bank';
   const bank=new FakeActor('bank',[data]),pc=new FakeActor('pc');world([bank,pc]);
   const moved=await transferItem(bank,pc,'w1',1);
   assert.equal(moved.system.carried,true);assert.equal(moved.flags[ID].storage,'Carried');
-  assert.equal(bank.items.get('w1').flags[ID].storage,'Wati Bank');
+  assert.equal(bank.items.get('w1').flags[ID].storage,'Town Bank');
 });
 test('legacy bank balances upgrade without mixing with a new named wallet',async()=>{
   const actor=new FakeActor('pc');actor.data.flags[ID]={bank:{pp:0,gp:9,sp:0,cp:0}};world([actor]);
   const mapping={ExampleHero:'pc'},before=snapshot(mapping);
-  const rows=[...before.rows,wallet({id:'new',storage:'Wati Bank',gp:154})];
+  const rows=[...before.rows,wallet({id:'new',storage:'Town Bank',gp:154})];
   await applyRows(rows,mapping,before.links);
   const after=snapshot(mapping,rows,rows).rows.filter(r=>r.kind==='wallet');
   assert.equal(after.find(r=>r.storage==='Bank').gp,9);
-  assert.equal(after.find(r=>r.storage==='Wati Bank').gp,154);
+  assert.equal(after.find(r=>r.storage==='Town Bank').gp,154);
   assert.equal(after.length,3);
 });
 test('GM location registry allows new banks, blocks occupied removal and unknown locations',()=>{
   const b=bridge();
-  let result=b.call({action:'locations',locations:['Carried','Wati Bank','Magnimar Bank']});assert.equal(result.ok,true);
-  assert.deepEqual(result.locations,['Carried','Wati Bank','Magnimar Bank']);
-  result=b.call({action:'commit',revision:result.revision,rows:[item({storage:'Wati Bank'}),wallet({storage:'Wati Bank'})]});assert.equal(result.ok,true);
+  let result=b.call({action:'locations',locations:['Carried','Town Bank','Magnimar Bank']});assert.equal(result.ok,true);
+  assert.deepEqual(result.locations,['Carried','Town Bank','Magnimar Bank']);
+  result=b.call({action:'commit',revision:result.revision,rows:[item({storage:'Town Bank'}),wallet({storage:'Town Bank'})]});assert.equal(result.ok,true);
   assert.equal(b.call({action:'locations',locations:['Carried','Magnimar Bank']}).ok,false);
   assert.equal(b.call({action:'locations',token:'wrong',locations:['Carried']}).ok,false);
   assert.equal(b.call({action:'commit',revision:result.revision,rows:[item({storage:'Unregistered stash'})]}).ok,false);

@@ -1,37 +1,11 @@
 # PF1 Inventory · Sheets Sync
 
-A Foundry VTT 13 module for Pathfinder 1e: review and synchronise inventories with Google Sheets, distribute loot, and track separate GM-managed banks and stashes.
+Version 0.3.0 for Foundry VTT 13 / Pathfinder 1e 11.x. Editable character inventories, party loot, separate bank wallets and reviewable two-way sync.
 
-## Install
+Install manifest: https://github.com/saluce/Foundry-PF1e-Sheets/releases/latest/download/module.json
 
-In Foundry Setup, select **Add-on Modules → Install Module** and paste:
+Download both blank templates from [the latest release](https://github.com/saluce/Foundry-PF1e-Sheets/releases/latest), import them as separate Google spreadsheets, and follow [the setup guide](docs/setup.md). The private GM workbook requires a new private standalone Apps Script deployment. Do not reuse a script attached to a player-shared workbook.
 
-```text
-https://github.com/saluce/Foundry-PF1e-Sheets/releases/latest/download/module.json
-```
+GM-only names, values, properties and notes stay in a separate private file. Reveal name, value and properties independently; notes never reveal. GM-managed locations and partial-stack transfers preserve private record links. Existing PF1 mechanics retain normal Foundry visibility.
 
-Enable **PF1 Inventory · Sheets Sync** in your world. Open the Actors sidebar as GM and choose **Inventory · Sheets Sync**.
-
-## Connect Google Sheets
-
-Download the blank workbook from [the latest release](https://github.com/saluce/Foundry-PF1e-Sheets/releases/latest), open it as a native Google Sheet, and follow the [setup guide](docs/setup.md). The Google Apps Script source is in [google-apps-script/Code.gs](google-apps-script/Code.gs). The spreadsheet can remain private; the endpoint uses a GM connection secret.
-
-## Features
-
-- Two-way item and coin sync with previews and conflict choices.
-- Separate character inventory and party loot tables.
-- GM-controlled full-item and partial-stack transfers.
-- GM-managed storage locations with independent wallets.
-- Legacy inventory-tab conversion and pre-sync recovery snapshots.
-
-New sheet-only items become basic loot. Existing native items retain their PF1 mechanics. Linked containers must be unpacked before using the transfer tool.
-
-## Status and tests
-
-Version **0.2.0**, for **Foundry 13** and **PF1 11.x**. Automated checks cover reconciliation, item transfers, rollback, named banks, permissions and the Google bridge. Run:
-
-```sh
-node --test tests/sync.test.mjs
-```
-
-Live Google / Foundry integration still needs verification in a test world. Back up your world before first use. No campaign inventories or recovery backups are included in this repository.
+Run `node --test tests/*.test.mjs`. All 30 checks pass locally; live Google/Foundry integration still needs a test-world check. Back up your world before first use. No campaign inventories or secrets are included here.

@@ -1,15 +1,16 @@
 import {ID, escapeHTML as e, indexRows, reconcile, resolvePlan, convertLegacy, same} from "./core.mjs";
 import {assertGM, mappedActors, snapshot, validateApply, applyRows} from "./foundry.mjs";
 import {tradeDialog} from "./trade.mjs";
+import {publicState,cleanGMRecord,migratedPrivate} from './privacy.mjs';
 
 let busy = false;
-const perWorld = new Set(["baseline","refs","binding"]);
+const perWorld = new Set(["baseline","refs","binding","privacySchema"]);
 const setting = key => {
   const value=game.settings.get(ID,key);
-  return perWorld.has(key) ? value[game.world.id] ?? (key === "baseline"?[]:key === "binding"?"":{}) : value;
+  return perWorld.has(key) ? value[game.world.id] ?? (key === "baseline"?[]:key === "binding"?"":key==='privacySchema'?0:{}) : value;
 };
 const save = (key,value) => game.settings.set(ID,key,perWorld.has(key)?{...game.settings.get(ID,key),[game.world.id]:value}:value);
-function notifyError(err) { console.error(`${ID} |`, err); ui.notifications.error(err.message); }
+function notifyError(err) { console.error(`${ID} | Operation failed; private payloads are not logged.`); ui.notifications.error(err.message); }
 function dialog(title, content, buttons, width = 720) {
   return new Dialog({title,content:`<div class="pf1-sync">${content}</div>`,buttons}, {width}).render(true);
 }
@@ -37,7 +38,7 @@ async function request(action, extra = {}) {
 Hooks.once("init", () => {
   game.settings.register(ID,"endpoint", {name:"Google Sheets connection URL",hint:"The /exec URL from the supplied Google Apps Script deployment.",scope:"client",config:true,type:String,default:""});
   game.settings.register(ID,"token", {name:"Connection secret (GM browser only)",hint:"The secret from Apps Script. This is stored in this browser; do not share it with players.",scope:"client",config:true,type:String,default:""});
-  for (const key of ["mapping","baseline","refs","binding"]) game.settings.register(ID,key,{scope:key === "mapping"?"world":"client",config:false,type:Object,default:{},restricted:true});
+  for (const key of ["mapping","baseline","refs","binding","privacySchema"]) game.settings.register(ID,key,{scope:key === "mapping"?"world":"client",config:false,type:Object,default:{},restricted:true});
 });
 Hooks.once("ready", () => {
   game.modules.get(ID).api = {open:openPanel};
@@ -58,17 +59,48 @@ function openPanel() {
     <p>New sheet items become basic loot entries. Existing items keep their Pathfinder rules and actions.</p>`, {
     mapping:{label:"Choose owners / actors",callback:()=>chooseMapping().catch(notifyError)},
     sync:{label:"Preview sync",callback:()=>exclusive(preview).catch(notifyError)},
-    trade:{label:"Distribute loot",callback:()=>readSheet().then(s=>tradeDialog(exclusive,s.locations)).catch(notifyError)},
+    trade:{label:"Distribute loot",callback:()=>readSheet().then(s=>tradeDialog(exclusive,s.locations,prepareTransfer)).catch(notifyError)},
+    secrets:{label:'GM item details / reveal',callback:()=>chooseGMItem().catch(notifyError)},
     locations:{label:"Manage locations (GM)",callback:()=>manageLocations().catch(notifyError)},
     legacy:{label:"Convert old tab (CSV)",callback:()=>legacyDialog()},
     close:{label:"Close"}
   });
 }
 async function readSheet() {
-  const data = await request("read");
-  if (setting("binding") && setting("binding") !== data.binding) throw Error("This world was paired with another sheet. Restore the original connection; changing sheets requires a fresh world baseline.");
+  const data = publicState(await request("read"));
+  if (setting('privacySchema')===3 && setting("binding") && setting("binding") !== data.binding) throw Error("This world was paired with another sheet. Restore the original connection.");
   indexRows(data.rows);
   return data;
+}
+async function prepareTransfer({sourceId,targetId,legacy}) {
+  if(legacy)await request('migratePrivate',{records:[legacy]});
+  await request('clonePrivate',{sourceId,targetId});
+}
+async function chooseGMItem(){
+  assertGM();const data=await readSheet(),items=data.rows.filter(r=>r.kind==='item');
+  if(!items.length)throw Error('Sync or add an item before editing GM details.');
+  dialog('Private GM item details',`<p>These records live in the separate private GM workbook. Saving does not reveal them.</p><label>Item<select name="item">${items.map(r=>`<option value="${e(r.id)}">${e(r.owner)} / ${e(r.name)} / ${e(r.storage)}</option>`).join('')}</select></label>`,{
+    open:{label:'Open private record',callback:html=>editGMItem(root(html).querySelector('[name=item]').value).catch(notifyError)},cancel:{label:'Cancel'}
+  });
+}
+async function editGMItem(id){
+  assertGM();const data=await request('gmRead',{id});const r=data.record;
+  const form=`<p>Private GM information. Only checked reveal fields are copied to the player workbook. GM notes always stay private.</p>
+    <label>True name<input name="trueName" value="${e(r.trueName)}"></label>
+    <label>Actual unit value (gp)<input name="actualValue" type="number" min="0" step="any" value="${e(r.actualValue)}"></label>
+    <label>Secret properties<textarea name="secretProperties" rows="4">${e(r.secretProperties)}</textarea></label>
+    <label>GM notes<textarea name="gmNotes" rows="6">${e(r.gmNotes)}</textarea></label>
+    <p>Reveal to players:</p>${[['name','True name'],['price','Actual value'],['properties','Properties']].map(([key,label])=>`<label><input type="checkbox" name="reveal-${key}"> ${label}</label>`).join('')}
+    <p class="hint">Revealed information cannot be made secret again. After revealing, Preview sync updates Foundry.</p>`;
+  const saveForm=async(html,reveal)=>{
+    const el=root(html),record=cleanGMRecord(Object.fromEntries(['trueName','actualValue','secretProperties','gmNotes'].map(k=>[k,el.querySelector(`[name=${k}]`).value])),id);
+    const fields=['name','price','properties'].filter(k=>el.querySelector(`[name=reveal-${k}]`).checked);
+    if(reveal&&!fields.length)throw Error('Select at least one field to reveal.');
+    const saved=await request('gmSave',{id,record,gmRevision:data.gmRevision});
+    if(reveal)await request('reveal',{id,fields,gmRevision:saved.gmRevision,revision:saved.revision});
+    ui.notifications.info(reveal?'Selected details revealed in the player sheet. Preview sync to update Foundry.':'Private GM details saved. Nothing was revealed.');
+  };
+  dialog('GM details — private',form,{save:{label:'Save private details',callback:html=>exclusive(()=>saveForm(html,false)).catch(notifyError)},reveal:{label:'Save and reveal selected',callback:html=>exclusive(()=>saveForm(html,true)).catch(notifyError)},cancel:{label:'Cancel'}},760);
 }
 async function manageLocations() {
   assertGM();
@@ -87,10 +119,10 @@ async function manageLocations() {
 async function chooseMapping() {
   const sheet = await readSheet();
   const mapping = setting("mapping");
-  const owners = [...new Set([...Object.keys(mapping), ...sheet.rows.map(r=>r.owner)])];
+  const owners = [...new Set([...Object.keys(mapping),...sheet.owners, ...sheet.rows.map(r=>r.owner)])];
   const actors = [...game.actors].filter(a=>a.isOwner).sort((a,b)=>a.name.localeCompare(b.name));
   dialog("Choose inventory owners", `<p>Map each sheet owner to one actor. Use an NPC or loot actor for shared loot and chests.</p>
-    <label>Additional owners (one per line)<textarea name="extra" rows="3" placeholder="Example Hero&#10;Party Loot"></textarea></label>
+    <label>Additional owners (one per line)<textarea name="extra" rows="3" placeholder="ExampleHero&#10;Party Loot"></textarea></label>
     ${owners.map((owner,i)=>`<label>${e(owner)}<select name="owner${i}"><option value="">Do not sync</option>${actors.map(a=>`<option value="${e(a.id)}" ${mapping[owner] === a.id ? "selected" : ""}>${e(a.name)}</option>`).join("")}</select></label>`).join("")}`, {
     save:{label:"Save / add owners",callback:async html=>{
       try {
@@ -115,10 +147,18 @@ async function chooseMapping() {
 async function preview() {
   const mapping = setting("mapping"); mappedActors(mapping);
   if (!Object.keys(mapping).length) throw Error("Choose owners / actors first.");
-  const sheet = await readSheet(), base = setting("baseline");
+  let sheet = await readSheet();
+  const base = setting("baseline").map(r=>setting('privacySchema')===3?r:{...r,notes:'',properties:''});
   const selected = sheet.rows.filter(r=>Object.hasOwn(mapping,r.owner));
   if(sheet.locations && selected.some(r=>!sheet.locations.includes(r.storage))) throw Error('Use Manage locations to register each storage location first.');
-  const refs=setting("refs"), local = snapshot(mapping,selected,base,refs);
+  if(selected.some(r=>r.kind==='wallet'&&['pp','gp','sp','cp'].some(k=>r[k]===null)))throw Error('Fill in the unrecorded coin balances in Wallets before syncing these owners.');
+  const beforePrivate=sheet.rows,refs=setting("refs"), local = snapshot(mapping,selected,base,refs);
+  const targets=new Set(local.lineages.map(r=>r.targetId));
+  const privateRecords=local.rows.filter(r=>r.kind==='item'&&!targets.has(r.id)).map(r=>({id:r.id,owner:r.owner,trueName:r.name,actualValue:r.price,gmNotes:''}));
+  await request('migratePrivate',{records:[...privateRecords,...local.legacyNotes]});
+  for(const lineage of local.lineages)await request('clonePrivate',lineage);
+  sheet=await readSheet();
+  if(!same(beforePrivate,sheet.rows))throw Error('The player inventory changed while preparing private records. Preview again.');
   const plan = reconcile(base,local.rows,selected);
   // Owners stay fixed, and carried wallets remain separate from stored ones.
   for (const r of selected.filter(r=>r.kind === "wallet")) {
@@ -149,7 +189,7 @@ async function preview() {
       const backup={version:1,world:game.world.id,created:new Date().toISOString(),baseline:base,sheet,
         actors:mappedActors(mapping).map(({actor})=>actor.toObject())};
       foundry.utils.saveDataToFile(JSON.stringify(backup,null,2),"application/json",`inventory-backup-${Date.now()}.json`);
-      await applyRows(desired,mapping,local.links);
+      await applyRows(desired,mapping,local.links,{privateReady:true});
       const afterState=snapshot(mapping,desired,desired,refs),after=afterState.rows;
       const untouched=sheet.rows.filter(r=>!Object.hasOwn(mapping,r.owner));
       try {
@@ -158,6 +198,7 @@ async function preview() {
         throw Error(`Foundry was updated but the sheet was not confirmed. Baseline kept unchanged. Check the sheet, then preview again. ${err.message}`);
       }
       await save("baseline",after); await save("binding",sheet.binding);
+      await save('privacySchema',3);
       await save("refs",Object.fromEntries([...afterState.links].filter(([,v])=>v.item).map(([id,v])=>[id,`${v.actor.id}:${v.item.id}`])));
       ui.notifications.info("Inventories and sheet synchronised.");
     }).catch(notifyError)}, cancel:{label:"Cancel"}
@@ -166,7 +207,7 @@ async function preview() {
 
 function legacyDialog() {
   dialog("Convert an old inventory tab", `<p>In your old Google Sheet, open one character tab, then File → Download → CSV. Upload that CSV here. Conversion adds rows to the new sheet; it never edits the original.</p>
-    <label>Owner name<input name="owner" placeholder="Example Hero"></label>
+    <label>Owner name<input name="owner" placeholder="ExampleHero"></label>
     <label>Old tab CSV<input type="file" name="file" accept=".csv,text/csv"></label>
     <label><input type="checkbox" name="stackValues"> Old Value column is for the whole stack</label>
     <label><input type="checkbox" name="stackWeights"> Old Weight column is for the whole stack</label>
@@ -180,7 +221,9 @@ function legacyDialog() {
       dialog("Review converted inventory", `<p>${rows.length} rows for ${e(owner)}. ${rows.filter(r=>r.notes?.includes("Quantity was blank")).length} blank quantities imported as 1 and flagged in Notes. Stack amounts were converted according to your choices.</p>
         <div class="scroll"><table><thead><tr><th>Item / wallet</th><th>Qty / gp</th><th>Storage</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${e(r.name || "Coins")}</td><td>${e(r.quantity ?? r.gp)}</td><td>${e(r.storage)}</td></tr>`).join("")}</tbody></table></div>`, {
         import:{label:"Add to new sheet",callback:()=>exclusive(async()=>{
-          await request("commit",{revision:sheet.revision,rows:[...sheet.rows,...rows]});
+          await request('migratePrivate',{records:rows.filter(r=>r.kind==='item').map(migratedPrivate)});
+          const current=await readSheet();if(!same(current.rows,sheet.rows))throw Error('Inventory changed during import. Preview again.');
+          await request("commit",{revision:current.revision,rows:[...sheet.rows,...rows.map(r=>r.kind==='item'?{...r,notes:'',properties:''}:r)]});
           ui.notifications.info("Old inventory converted. Choose its actor, then preview sync.");
         }).catch(notifyError)},cancel:{label:"Cancel"}
       });

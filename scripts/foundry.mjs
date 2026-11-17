@@ -18,7 +18,7 @@ export function mappedActors(mapping) {
   });
 }
 export function snapshot(mapping, sheetRows = [], baseRows = [], refs = {}) {
-  const rows = [], links = new Map();
+  const rows = [], links = new Map(), legacyNotes=[],lineages=[];
   const actors=mappedActors(mapping);
   const claimants=new Map();
   for(const {actor} of actors) for(const item of actor.items) {
@@ -37,7 +37,7 @@ export function snapshot(mapping, sheetRows = [], baseRows = [], refs = {}) {
         const original=candidates.find(c=>refs[f.rowId] === `${c.actor.id}:${c.item.id}`)
           ?? candidates.find(c=>baseRows.find(b=>b.id===f.rowId)?.owner === actors.find(a=>a.actor.id===c.actor.id)?.owner)
           ?? candidates[0];
-        if(original.item !== item) id=`${actor.id}:${item.id}`;
+        if(original.item !== item) {id=`${actor.id}:${item.id}`;lineages.push({sourceId:f.rowId,targetId:id});}
       }
       if (!f.rowId && !baseRows.some(r => r.id === id)) {
         const candidates = sheetRows.filter(r => r.kind === "item" && r.owner === owner && r.name === item.name && !baseRows.some(b=>b.id===r.id));
@@ -47,9 +47,10 @@ export function snapshot(mapping, sheetRows = [], baseRows = [], refs = {}) {
         if (candidates.length === 1) id = candidates[0].id;
       }
       const uses = s.uses?.per ? s.uses.value : f.uses;
+      if(f.notes||f.gmNotes||f.trueName||f.secretProperties||f.actualValue!=null)legacyNotes.push({id,owner,trueName:f.trueName??item.name,actualValue:f.actualValue??s.price,secretProperties:f.secretProperties??'',gmNotes:[f.notes,f.gmNotes].filter(Boolean).join('\n')});
       const r = normalize({kind:"item", id, owner, name:item.name, quantity:s.quantity, uses,
         price:f.unknownPrice && s.price === 0 ? null : s.price, weight:f.unknownWeight && s.weight === 0 ? null : s.weight, sell:f.sell ?? false,
-        storage:s.carried === false ? f.storage || "Bank" : "Carried", notes:f.notes ?? ""});
+        storage:s.carried === false ? f.storage || "Bank" : "Carried", notes:f.publicNotes ?? "",properties:f.publicProperties ?? ""});
       rows.push(r); links.set(id, {actor, item});
     }
     const previous=[...baseRows,...sheetRows].filter(r=>r.kind === "wallet" && r.owner === owner);
@@ -70,7 +71,7 @@ export function snapshot(mapping, sheetRows = [], baseRows = [], refs = {}) {
     }
   }
   indexRows(rows);
-  return {rows, links};
+  return {rows, links, legacyNotes,lineages};
 }
 export function validateApply(rows, mapping, links) {
   const owners = new Set(Object.keys(mapping));
@@ -81,8 +82,10 @@ export function validateApply(rows, mapping, links) {
     if (link && link.actor.id !== mapping[r.owner]) throw Error(`${r.name || r.owner}: transfer items using Foundry's trade tools, then sync. Editing Owner in the sheet cannot transfer a linked item.`);
   }
 }
-export async function applyRows(rows, mapping, links) {
+export async function applyRows(rows, mapping, links, {privateReady=false}={}) {
   assertGM(); validateApply(rows, mapping, links);
+  if(rows.some(r=>r.kind==='wallet'&&['pp','gp','sp','cp'].some(k=>r[k]===null)))throw Error('Record unknown coin balances before syncing.');
+  if(!privateReady && [...links.values()].some(v=>['notes','gmNotes','trueName','actualValue','secretProperties'].some(k=>v.item?.flags?.[ID]?.[k]!=null&&v.item.flags[ID][k]!=='')))throw Error('Save legacy notes in the private GM workbook before updating these items.');
   for (const r of rows) {
     const actor = game.actors.get(mapping[r.owner]);
     if (r.kind === "wallet") {
@@ -101,10 +104,13 @@ export async function applyRows(rows, mapping, links) {
     const item = links.get(r.id)?.item;
     const update = {
       name:r.name, "system.quantity":r.quantity, "system.carried":r.storage === "Carried",
-      [`flags.${ID}.rowId`]:r.id, [`flags.${ID}.sell`]:r.sell, [`flags.${ID}.notes`]:r.notes,
+      [`flags.${ID}.rowId`]:r.id, [`flags.${ID}.sell`]:r.sell, [`flags.${ID}.publicNotes`]:r.notes,
+      [`flags.${ID}.publicProperties`]:r.properties??'',
       [`flags.${ID}.uses`]:r.uses
     };
     update[`flags.${ID}.storage`]=r.storage;
+    // Legacy notes are migrated to the private service before this write.
+    for(const key of ['notes','gmNotes','trueName','actualValue','secretProperties'])update[`flags.${ID}.-=${key}`]=null;
     for (const field of ["price", "weight"]) {
       if (r[field] !== null) update[`system.${field}`] = r[field];
       update[`flags.${ID}.unknown${field === "price"?"Price":"Weight"}`] = r[field] === null;
@@ -116,7 +122,7 @@ export async function applyRows(rows, mapping, links) {
     } else {
       const system = {quantity:r.quantity, carried:r.storage === "Carried", price:r.price ?? 0, weight:r.weight ?? 0, identified:true};
       const created = await actor.createEmbeddedDocuments("Item", [{name:r.name, type:"loot", img:"icons/svg/item-bag.svg", system,
-        flags:{[ID]:{rowId:r.id,sell:r.sell,notes:r.notes,uses:r.uses,storage:r.storage,unknownPrice:r.price === null,unknownWeight:r.weight === null}}}]);
+        flags:{[ID]:{rowId:r.id,sell:r.sell,publicNotes:r.notes,publicProperties:r.properties??'',uses:r.uses,storage:r.storage,unknownPrice:r.price === null,unknownWeight:r.weight === null}}}]);
       links.set(r.id, {actor, item:created[0]});
     }
   }

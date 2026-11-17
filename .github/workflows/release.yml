@@ -31,7 +31,7 @@ jobs:
         with:
           node-version: '22'
       - name: Run regression tests
-        run: node --test tests/sync.test.mjs
+        run: node --test tests/*.test.mjs
       - name: Build release assets
         shell: python
         run: |
@@ -43,10 +43,11 @@ jobs:
           assert manifest['id'] == 'pf1-sheet-inventory-sync'
           assert manifest['version']
           shutil.copyfile('module.json', out / 'module.json')
-          template = base64.b64decode(pathlib.Path('templates/party-inventory.xlsx.base64').read_text())
-          (out / 'Party.Inventory.Template.xlsx').write_bytes(template)
-          with zipfile.ZipFile(out / 'Party.Inventory.Template.xlsx') as workbook:
-              assert 'xl/workbook.xml' in workbook.namelist()
+          for source, target in [('player-template.xlsx.base64', 'Player.Inventory.Template.xlsx'), ('gm-template.xlsx.base64', 'Private.GM.Template.xlsx')]:
+              template = base64.b64decode(pathlib.Path('templates', source).read_text())
+              (out / target).write_bytes(template)
+              with zipfile.ZipFile(out / target) as workbook:
+                  assert 'xl/workbook.xml' in workbook.namelist()
           paths = [pathlib.Path('module.json'), pathlib.Path('README.md'), pathlib.Path('CHANGELOG.md')]
           for folder in ['scripts', 'styles', 'google-apps-script', 'docs']:
               paths.extend(p for p in pathlib.Path(folder).rglob('*') if p.is_file())
@@ -57,7 +58,7 @@ jobs:
               assert 'module.json' in package.namelist()
               assert not any(p.startswith(('tests/', 'templates/')) for p in package.namelist())
           (out / 'version.txt').write_text(manifest['version'])
-          (out / 'notes.md').write_text('Foundry VTT 13 / Pathfinder 1e 11.x inventory sync with Google Sheets.\n\nIncludes reviewable two-way sync, GM loot transfers, named banks and stashes, independent wallets and a blank workbook.\n\nUse module.json as the Foundry install manifest. See the repository README and docs/setup.md for the Google connection.\n\nAutomated tests pass. Live integration still requires a test-world check. No campaign data is included.\n')
+          (out / 'notes.md').write_text('Foundry VTT 13 / Pathfinder 1e 11.x inventory sync with Google Sheets.\n\nIncludes reviewable two-way sync, GM loot transfers, named banks and stashes, independent wallets, a separate private GM store, selective reveals and two blank workbooks.\n\nUse module.json as the Foundry install manifest. See the repository README and docs/setup.md for the Google connection.\n\nAutomated tests pass. Live integration still requires a test-world check. No campaign data is included.\n')
       - name: Publish release if this version is new
         env:
           GH_TOKEN: ${{ github.token }}
@@ -77,5 +78,7 @@ jobs:
             --notes-file release-assets/notes.md \
             release-assets/module.json \
             release-assets/module.zip \
-            release-assets/Party.Inventory.Template.xlsx
+            release-assets/Player.Inventory.Template.xlsx \
+            release-assets/Private.GM.Template.xlsx
+
 

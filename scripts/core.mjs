@@ -1,5 +1,5 @@
 export const ID = "pf1-sheet-inventory-sync";
-export const ITEM_FIELDS = ["owner", "name", "quantity", "uses", "price", "weight", "sell", "storage", "notes"];
+export const ITEM_FIELDS = ["owner", "name", "quantity", "uses", "price", "weight", "sell", "storage", "notes", "properties"];
 export const WALLET_FIELDS = ["owner", "storage", "pp", "gp", "sp", "cp"];
 export const ITEM_HEADERS = ["Sync ID", "Owner", "Item", "Qty", "Uses", "Unit value (gp)", "Unit weight (lb)", "Sell", "Storage", "Notes"];
 export const WALLET_HEADERS = ["Sync ID", "Owner", "Storage", "Platinum", "Gold", "Silver", "Copper"];
@@ -32,6 +32,7 @@ export function normalize(r) {
     for (const k of ["uses", "price", "weight"]) out[k] = numeric(r[k], `${out.name} ${k}`, {integer: k === "uses"});
     out.sell = truth(r.sell);
     out.notes = String(r.notes ?? "");
+    out.properties = String(r.properties ?? "");
   }
   return out;
 }
