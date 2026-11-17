@@ -8,7 +8,7 @@ A local server for your party's inventories. Players can use their browsers whil
 2. On Windows, double-click **web-portal/Start Ledger.cmd**. Keep its window open. Or run `node web-portal/server.mjs --open` from the extracted root.
 3. First launch opens a private setup link. Create your GM account with a unique password of at least 12 characters. The one-use setup link is also saved as setup-link.txt beside the database. It stops working once the account exists.
 4. In the GM desk, import your private ledger JSON if the ledger is empty. The supplied blank server does not include campaign data. This workspace's prepared local server already has the migrated campaign imported.
-5. Create inventories and invitations at the GM desk. A player creates their own account through the one-use invitation. Assign characters to control which inventories they may edit. Accounts can be reassigned or disabled; this signs the player out immediately.
+5. Open **Players & accounts** from the GM sidebar, or from the GM desk. Use **Invite a player** for a one-use signup link and **Assign characters** on an existing account to choose its editable inventories. Create new character inventories using **+ Inventory**. A player creates their own account through the one-use invitation. Assign characters to control which inventories they may edit. Accounts can be reassigned or disabled; this signs the player out immediately.
 
 Default address: **http://127.0.0.1:4317/**, accessible only on the host PC. This localhost address cannot be shared with remote players. The server binds to loopback by default and does not change your router or firewall.
 

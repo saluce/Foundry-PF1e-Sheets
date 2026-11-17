@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2
+
+- Dedicated GM Players and accounts page for invitations, character assignments and account status.
+- Direct navigation from the GM sidebar and dashboard.
+
 ## 0.5.1
 
 - Show/Hide password buttons on sign-in, account setup, invitations and password-change forms.
