@@ -73,16 +73,16 @@ export function snapshot(mapping, sheetRows = [], baseRows = [], refs = {}) {
   indexRows(rows);
   return {rows, links, legacyNotes,lineages};
 }
-export function validateApply(rows, mapping, links) {
+export function validateApply(rows, mapping, links,{allowTransfers=false}={}) {
   const owners = new Set(Object.keys(mapping));
   indexRows(rows);
   for (const r of rows) {
     if (!owners.has(r.owner)) throw Error(`Map an actor for ${r.owner} first.`);
     const link = links.get(r.id);
-    if (link && link.actor.id !== mapping[r.owner]) throw Error(`${r.name || r.owner}: transfer items using Foundry's trade tools, then sync. Editing Owner in the sheet cannot transfer a linked item.`);
+    if (link && link.actor.id !== mapping[r.owner] && (!allowTransfers||r.kind!=='item')) throw Error(`${r.name || r.owner}: transfer items using Foundry's trade tools, then sync. Editing Owner in the sheet cannot transfer a linked item.`);
   }
 }
-export async function applyRows(rows, mapping, links, {privateReady=false}={}) {
+async function applyBasicRows(rows, mapping, links, {privateReady=false}={}) {
   assertGM(); validateApply(rows, mapping, links);
   if(rows.some(r=>r.kind==='wallet'&&['pp','gp','sp','cp'].some(k=>r[k]===null)))throw Error('Record unknown coin balances before syncing.');
   if(!privateReady && [...links.values()].some(v=>['notes','gmNotes','trueName','actualValue','secretProperties'].some(k=>v.item?.flags?.[ID]?.[k]!=null&&v.item.flags[ID][k]!=='')))throw Error('Save legacy notes in the private GM workbook before updating these items.');
@@ -125,5 +125,38 @@ export async function applyRows(rows, mapping, links, {privateReady=false}={}) {
         flags:{[ID]:{rowId:r.id,sell:r.sell,publicNotes:r.notes,publicProperties:r.properties??'',uses:r.uses,storage:r.storage,unknownPrice:r.price === null,unknownWeight:r.weight === null}}}]);
       links.set(r.id, {actor, item:created[0]});
     }
+  }
+}
+
+export async function applyRows(rows,mapping,links,options={}){
+  if(!options.allowTransfers)return applyBasicRows(rows,mapping,links,options);
+  assertGM();validateApply(rows,mapping,links,{allowTransfers:true});
+  const originals=new Map([...links].filter(([,v])=>v.item).map(([id,v])=>[id,{...v,data:v.item.toObject()}])),work=new Map(links),ancestry=new Map((options.lineages??[]).map(r=>[r.targetId,r.sourceId]));
+  const actorBackups=new Map(Object.values(mapping).map(id=>{const a=game.actors.get(id);return [id,{actor:a,data:a.toObject()}];}));
+  const created=[],moves=[],clones=[];
+  const standalone=source=>{const d=source.data,physical=['weapon','equipment','consumable','loot','container'].includes(source.item.type),linked=d.system.links&&Object.values(d.system.links).some(v=>Array.isArray(v)?v.length:!!v);if(!physical||source.item.inContainer||linked||[...source.actor.items].some(i=>i.toObject().system.containerId===source.item.id))throw Error('Unpack linked containers and ammunition relationships before syncing website transfers.');};
+  for(const r of rows.filter(r=>r.kind==='item')){
+    const existing=originals.get(r.id),moving=existing&&existing.actor.id!==mapping[r.owner];
+    if(existing&&!moving)continue;
+    let source=existing,id=r.id,visited=new Set();
+    while(!source&&ancestry.has(id)){if(visited.has(id)||visited.size>50)throw Error('Invalid website stack ancestry.');visited.add(id);id=ancestry.get(id);source=originals.get(id);}
+    if(!source){if([...visited,id].some(k=>(options.nativeSourceIds??[]).includes(k)))throw Error('A website transfer source is missing in Foundry. Restore or resolve the original item before syncing.');continue;}
+    standalone(source);clones.push({r,source,moving});
+  }
+  try{
+    // Create all recipient copies before reducing or deleting any original stack.
+    for(const {r,source,moving}of clones){const actor=game.actors.get(mapping[r.owner]),data=structuredClone(source.data);delete data._id;delete data._stats;data.system.quantity=r.quantity;data.flags??={};data.flags[ID]={...data.flags[ID],rowId:r.id};for(const key of ['notes','gmNotes','trueName','actualValue','secretProperties'])delete data.flags[ID][key];const result=await actor.createEmbeddedDocuments('Item',[data]);if(result.length!==1)throw Error('A recipient could not create its item.');created.push({actor,item:result[0]});work.set(r.id,{actor,item:result[0]});if(moving)moves.push(source);}
+    await applyBasicRows(rows,mapping,work,options);
+    for(const source of moves)await source.actor.deleteEmbeddedDocuments('Item',[source.item.id]);
+    links.clear();for(const [id,value]of work)links.set(id,value);
+  }catch(err){
+    let restored=true;
+    const originalKeys=new Set([...originals.values()].map(v=>v.actor.id+':'+v.item.id)),cleanup=new Map(created.map(v=>[v.actor.id+':'+v.item.id,v]));
+    for(const v of work.values())if(v.item&&!originalKeys.has(v.actor.id+':'+v.item.id))cleanup.set(v.actor.id+':'+v.item.id,v);
+    for(const v of cleanup.values())try{if(v.actor.items.get(v.item.id))await v.actor.deleteEmbeddedDocuments('Item',[v.item.id]);}catch{restored=false;}
+    for(const v of originals.values())try{if(v.actor.items.get(v.item.id))await v.actor.updateEmbeddedDocuments('Item',[v.data],{diff:false,recursive:false});else await v.actor.createEmbeddedDocuments('Item',[v.data],{keepId:true});}catch{restored=false;}
+    for(const {actor,data}of actorBackups.values())try{await actor.update({'system.currency':data.system.currency,...(data.flags?.[ID]?{[`flags.${ID}`]:data.flags[ID]}:{[`flags.-=${ID}`]:null})});}catch{restored=false;}
+    if(!restored)throw Error('Website sync failed and rollback was incomplete. Restore the pre-sync actor backup before retrying.');
+    throw err;
   }
 }

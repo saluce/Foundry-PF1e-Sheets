@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 import {ID,normalize,indexRows,reconcile,resolvePlan,parseCSV,convertLegacy,ITEM_HEADERS,WALLET_HEADERS} from '../scripts/core.mjs';
-import {snapshot,applyRows} from '../scripts/foundry.mjs';
+import {snapshot,applyRows,validateApply} from '../scripts/foundry.mjs';
 import {transferItem} from '../scripts/trade.mjs';
 
 const item=(overrides={})=>normalize({kind:'item',id:'r1',owner:'Party Loot',name:'Wand',quantity:2,uses:28,price:100,weight:1,sell:false,storage:'Carried',notes:'Keep its magic',...overrides});
@@ -38,6 +38,27 @@ function world(actors) {
   globalThis.game={user:{isGM:true},system:{id:'pf1'},version:'13.351',actors:new Map(actors.map(a=>[a.id,a]))};
 }
 function native(overrides={}) {return {_id:'w1',name:'Wand',type:'consumable',system:{quantity:2,price:100,weight:1,carried:true,uses:{per:'charges',value:28,max:50},actions:[{name:'Shock',formula:'1d6'}]},flags:{[ID]:{rowId:'r1',publicNotes:'Keep its magic',sell:false}},...overrides};}
+
+test('website full transfers preserve native PF1 rules while the Sheets path still rejects owner edits',async()=>{
+  const a=new FakeActor('a',[native()]),b=new FakeActor('b');world([a,b]);const mapping={'Party Loot':'a',ExampleHero:'b'},local=snapshot(mapping),row=item({owner:'ExampleHero'});
+  assert.throws(()=>validateApply([row],mapping,local.links),/transfer items/);
+  await applyRows([row],mapping,local.links,{privateReady:true,allowTransfers:true});assert.equal(a.items.size,0);const moved=[...b.items.values()][0];assert.equal(moved.type,'consumable');assert.equal(moved.system.uses.value,28);assert.equal(moved.system.actions[0].formula,'1d6');assert.equal(moved.flags[ID].rowId,'r1');
+});
+test('website partial and chained transfers clone the native ancestor instead of becoming basic loot',async()=>{
+  const sword=native({name:'Sword',type:'weapon',system:{quantity:4,price:50,weight:2,carried:true,actions:[{name:'Attack',formula:'1d8'}]}}),a=new FakeActor('a',[sword]),b=new FakeActor('b'),c=new FakeActor('c');world([a,b,c]);const mapping={'Party Loot':'a',ExampleHero:'b',Other:'c'},local=snapshot(mapping);
+  const row=(id,owner,quantity)=>item({id,owner,quantity,name:'Sword',uses:null,price:50,weight:2});
+  await applyRows([row('r1','Party Loot',1),row('r2','ExampleHero',1),row('r3','Other',2)],mapping,local.links,{privateReady:true,allowTransfers:true,lineages:[{sourceId:'r1',targetId:'r2'},{sourceId:'r2',targetId:'r3'}]});
+  assert.equal(a.items.get('w1').system.quantity,1);assert.equal([...b.items.values()][0].type,'weapon');assert.equal([...c.items.values()][0].system.actions[0].formula,'1d8');assert.equal([...c.items.values()][0].system.quantity,2);
+});
+test('website transfer failures roll back recipient copies and preserve source inventories',async()=>{
+  const a=new FakeActor('a',[native()]),b=new FakeActor('b');a.failDelete=true;world([a,b]);const mapping={'Party Loot':'a',ExampleHero:'b'},local=snapshot(mapping);
+  await assert.rejects(()=>applyRows([item({owner:'ExampleHero'})],mapping,local.links,{privateReady:true,allowTransfers:true}),/Simulated source failure/);assert.equal(a.items.get('w1').system.quantity,2);assert.equal(b.items.size,0);assert.equal(local.links.get('r1').actor.id,'a');
+});
+test('website ancestry refuses missing native sources and packed containers before any mutation',async()=>{
+  const a=new FakeActor('a',[native()]),b=new FakeActor('b');world([a,b]);const mapping={'Party Loot':'a',ExampleHero:'b'},local=snapshot(mapping);
+  await assert.rejects(()=>applyRows([item({id:'new',owner:'ExampleHero'})],mapping,local.links,{privateReady:true,allowTransfers:true,nativeSourceIds:['gone'],lineages:[{sourceId:'gone',targetId:'new'}]}),/source is missing/);
+  a.items.get('w1').inContainer=true;await assert.rejects(()=>applyRows([item({owner:'ExampleHero'})],mapping,local.links,{privateReady:true,allowTransfers:true}),/Unpack/);assert.equal(a.items.size,1);assert.equal(b.items.size,0);
+});
 
 test('independent field edits merge both ways',()=>{
   const b=item(),l=item({quantity:1}),r=item({notes:'Sell later'});

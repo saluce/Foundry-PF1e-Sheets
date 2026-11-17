@@ -9,6 +9,8 @@ on:
       - styles/**
       - google-apps-script/**
       - templates/**
+      - web-portal/**
+      - tests/**
       - .github/workflows/release.yml
   workflow_dispatch:
 
@@ -29,9 +31,9 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
       - name: Run regression tests
-        run: node --test tests/*.test.mjs
+        run: node --test tests/*.test.mjs web-portal/tests/*.test.mjs
       - name: Build release assets
         shell: python
         run: |
@@ -57,8 +59,14 @@ jobs:
           with zipfile.ZipFile(out / 'module.zip') as package:
               assert 'module.json' in package.namelist()
               assert not any(p.startswith(('tests/', 'templates/')) for p in package.namelist())
+          server_paths = [p for p in pathlib.Path('web-portal').rglob('*') if p.is_file()]
+          server_paths += [pathlib.Path('scripts/core.mjs'), pathlib.Path('scripts/privacy.mjs'), pathlib.Path('google-apps-script/Code.gs')]
+          assert not any(p.suffix in ['.sqlite', '.db'] or p.name in ['setup-link.txt'] for p in server_paths)
+          with zipfile.ZipFile(out / 'Party.Ledger.Server.zip', 'w', zipfile.ZIP_DEFLATED) as package:
+              for p in server_paths:
+                  package.write(p, p.as_posix())
           (out / 'version.txt').write_text(manifest['version'])
-          (out / 'notes.md').write_text('Foundry VTT 13 / Pathfinder 1e 11.x inventory sync with Google Sheets.\n\nIncludes reviewable two-way sync, GM loot transfers, named banks and stashes, independent wallets, a separate private GM store, selective reveals, confirmed d20PFSRD weight/price lookup and two blank workbooks.\n\nUse module.json as the Foundry install manifest. See the repository README and docs/setup.md for the Google connection.\n\nAutomated tests pass. Live integration still requires a test-world check. No campaign data is included.\n')
+          (out / 'notes.md').write_text('Foundry VTT 13 / Pathfinder 1e 11.x inventory sync with Google Sheets.\n\nIncludes reviewable two-way sync, GM loot transfers, named banks and stashes, independent wallets, a separate private GM store, selective reveals, confirmed d20PFSRD weight/price lookup, the optional PC-hosted Party Ledger website and two blank workbooks.\n\nUse module.json as the Foundry install manifest. See the repository README and docs/setup.md for the Google connection.\n\nAutomated tests pass. Live integration still requires a test-world check. No campaign data is included.\n')
       - name: Publish release if this version is new
         env:
           GH_TOKEN: ${{ github.token }}
@@ -79,6 +87,7 @@ jobs:
             release-assets/module.json \
             release-assets/module.zip \
             release-assets/Player.Inventory.Template.xlsx \
-            release-assets/Private.GM.Template.xlsx
+            release-assets/Private.GM.Template.xlsx \
+            release-assets/Party.Ledger.Server.zip
 
 

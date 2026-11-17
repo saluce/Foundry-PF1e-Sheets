@@ -1,6 +1,12 @@
-# PF1 Inventory · Sheets Sync 0.4
+# PF1 Inventory · Sheets Sync 0.5
 
 For Foundry VTT 13 and Pathfinder 1e 11.x. Review inventory changes, distribute loot, and manage named banks and separate wallets.
+
+## Optional home-server website (0.5)
+
+Players can now use the separate **Party Ledger** website while Foundry is closed. Download **Party.Ledger.Server.zip** from the release and follow [the home-server guide](../web-portal/README.md). It provides player invitations, assigned-character editing, public weights/estimates, private actual values and differences, GM reveals, locations, approved trades and d20PFSRD lookup. No Google script is needed for this connection type.
+
+In module settings choose **Website / home server** and enter the website /api/bridge URL and its separate GM secret. Create that secret at the website GM desk and register the exact Foundry browser origins there. Google settings and baselines are retained separately. Preview the first sync before applying. Accepted website transfers preserve native item mechanics using stack ancestry; linked containers must be unpacked. Website access requires its server to be running; internet access additionally requires an HTTPS address/proxy. The Google workflow below remains supported.
 
 ## Install
 

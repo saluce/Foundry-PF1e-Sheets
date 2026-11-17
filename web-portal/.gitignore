@@ -1,0 +1,5 @@
+data/
+*.sqlite*
+*.backup.json
+setup-link.txt
+*.log

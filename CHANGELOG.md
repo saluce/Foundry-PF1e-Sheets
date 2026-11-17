@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Optional PC-hosted Party Ledger website with player accounts and one-use invitations.
+- Public weights and estimates; GM-only actual values, differences and reveals.
+- Server-authorised editing, approved trades, private backups and item lookup.
+- Website Foundry bridge with native full/split transfer preservation and rollback.
+- Separate Google/website connection secrets and per-source baselines.
+
 ## 0.4.0
 
 - Confirmed d20PFSRD name search and source URL lookup for weights and prices.

@@ -3,14 +3,16 @@ import {assertGM, mappedActors, snapshot, validateApply, applyRows} from "./foun
 import {tradeDialog} from "./trade.mjs";
 import {publicState,cleanGMRecord,migratedPrivate} from './privacy.mjs';
 import {lookupDialog} from './lookup.mjs';
+import {inventoryConnection,sourceStateKey} from './connection.mjs';
 
 let busy = false;
 const perWorld = new Set(["baseline","refs","binding","privacySchema"]);
+const stateKey=()=>sourceStateKey(game.world.id,game.settings.get(ID,'backend'));
 const setting = key => {
   const value=game.settings.get(ID,key);
-  return perWorld.has(key) ? value[game.world.id] ?? (key === "baseline"?[]:key === "binding"?"":key==='privacySchema'?0:{}) : value;
+  return perWorld.has(key) ? value[stateKey()] ?? (key === "baseline"?[]:key === "binding"?"":key==='privacySchema'?0:{}) : value;
 };
-const save = (key,value) => game.settings.set(ID,key,perWorld.has(key)?{...game.settings.get(ID,key),[game.world.id]:value}:value);
+const save = (key,value) => game.settings.set(ID,key,perWorld.has(key)?{...game.settings.get(ID,key),[stateKey()]:value}:value);
 function notifyError(err) { console.error(`${ID} | Operation failed; private payloads are not logged.`); ui.notifications.error(err.message); }
 function dialog(title, content, buttons, width = 720) {
   return new Dialog({title,content:`<div class="pf1-sync">${content}</div>`,buttons}, {width,classes:['dialog','pf1-sync-dialog']}).render(true);
@@ -23,9 +25,7 @@ async function exclusive(fn) {
 }
 async function request(action, extra = {}) {
   assertGM();
-  const url = setting("endpoint"), token = setting("token");
-  if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)) throw Error("Configure the deployed Google Apps Script /exec URL first.");
-  if (!token) throw Error("Enter the connection secret in module settings first.");
+  const {portal,url,token}=inventoryConnection(setting);
   const response = await fetch(url, {method:"POST", redirect:"follow", credentials:"omit",
     headers:{"Content-Type":"text/plain;charset=utf-8"},
     body:JSON.stringify({action,token,world:game.world.id,...extra}), signal:AbortSignal.timeout(45000)});
@@ -40,6 +40,9 @@ async function request(action, extra = {}) {
 }
 
 Hooks.once("init", () => {
+  game.settings.register(ID,'backend',{name:'Inventory connection type',scope:'client',config:true,type:String,choices:{sheets:'Google Sheets',portal:'Website / home server'},default:'sheets'});
+  game.settings.register(ID,'portalEndpoint',{name:'Website connection URL',hint:'Your Party Ledger address ending in /api/bridge.',scope:'client',config:true,type:String,default:''});
+  game.settings.register(ID,'portalToken',{name:'Website connection secret (GM browser only)',hint:'Generate this at the website GM desk. Keep it private.',scope:'client',config:true,type:String,default:''});
   game.settings.register(ID,"endpoint", {name:"Google Sheets connection URL",hint:"The /exec URL from the supplied Google Apps Script deployment.",scope:"client",config:true,type:String,default:""});
   game.settings.register(ID,"token", {name:"Connection secret (GM browser only)",hint:"The secret from Apps Script. This is stored in this browser; do not share it with players.",scope:"client",config:true,type:String,default:""});
   for (const key of ["mapping","baseline","refs","binding","privacySchema"]) game.settings.register(ID,key,{scope:key === "mapping"?"world":"client",config:false,type:Object,default:{},restricted:true});
@@ -65,14 +68,15 @@ function openPanel() {
     sync:{label:"Preview sync",callback:()=>exclusive(preview).catch(notifyError)},
     trade:{label:"Distribute loot",callback:()=>readSheet().then(s=>tradeDialog(exclusive,s.locations,prepareTransfer)).catch(notifyError)},
     secrets:{label:'GM item details / reveal',callback:()=>chooseGMItem().catch(notifyError)},
-    lookup:{label:'Look up item (d20PFSRD)',callback:()=>openLookup().catch(notifyError)},
-    missing:{label:'Check missing weights / values',callback:()=>openLookup(true).catch(notifyError)},
+    lookup:{label:'Look up item (d20PFSRD)',callback:()=>launchLookup().catch(notifyError)},
+    missing:{label:'Check missing weights / values',callback:()=>launchLookup(true).catch(notifyError)},
     locations:{label:"Manage locations (GM)",callback:()=>manageLocations().catch(notifyError)},
     legacy:{label:"Convert old tab (CSV)",callback:()=>legacyDialog()},
     close:{label:"Close"}
   });
 }
 const openLookup=lookupDialog({readSheet,request,dialog,root,exclusive,notifyError});
+async function launchLookup(missing=false){if(setting('backend')==='portal'){const u=new URL(setting('portalEndpoint'));window.open(u.origin+'/','_blank','noopener,noreferrer');ui.notifications.info('Use Look up beside an item on the inventory website.');return;}return openLookup(missing);}
 async function readSheet() {
   const data = publicState(await request("read"));
   if (setting('privacySchema')===3 && setting("binding") && setting("binding") !== data.binding) throw Error("This world was paired with another sheet. Restore the original connection.");
@@ -185,7 +189,7 @@ async function preview() {
       const choices=plan.conflicts.map((_,i)=>root(html).querySelector(`[name=conflict${i}]`).value);
       const desired=resolvePlan(plan,choices);
       if(sheet.locations && desired.some(r=>!sheet.locations.includes(r.storage))) throw Error('The selected location is not registered. Use Manage locations first.');
-      validateApply(desired,mapping,local.links);
+      validateApply(desired,mapping,local.links,{allowTransfers:setting('backend')==='portal'});
       indexRows([...sheet.rows.filter(r=>!Object.hasOwn(mapping,r.owner)),...desired]);
       // Any intervening inventory edit invalidates the preview; unrelated actor changes do not.
       if (!same(mapping,setting("mapping")) || !same(local.rows,snapshot(mapping,selected,base,refs).rows)) throw Error("Foundry inventory changed since preview. Preview again.");
@@ -196,7 +200,7 @@ async function preview() {
       const backup={version:1,world:game.world.id,created:new Date().toISOString(),baseline:base,sheet,
         actors:mappedActors(mapping).map(({actor})=>actor.toObject())};
       foundry.utils.saveDataToFile(JSON.stringify(backup,null,2),"application/json",`inventory-backup-${Date.now()}.json`);
-      await applyRows(desired,mapping,local.links,{privateReady:true});
+      await applyRows(desired,mapping,local.links,{privateReady:true,allowTransfers:setting('backend')==='portal',lineages:sheet.lineages,nativeSourceIds:Object.keys(refs)});
       const afterState=snapshot(mapping,desired,desired,refs),after=afterState.rows;
       const untouched=sheet.rows.filter(r=>!Object.hasOwn(mapping,r.owner));
       try {
