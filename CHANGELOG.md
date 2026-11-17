@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1
+
+- Show/Hide password buttons on sign-in, account setup, invitations and password-change forms.
+- Keep submit actions separate from visibility controls.
+
 ## 0.5.0
 
 - Optional PC-hosted Party Ledger website with player accounts and one-use invitations.
