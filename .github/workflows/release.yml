@@ -1,0 +1,81 @@
+name: Test and publish Foundry release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - module.json
+      - scripts/**
+      - styles/**
+      - google-apps-script/**
+      - templates/**
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: foundry-module-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run regression tests
+        run: node --test tests/sync.test.mjs
+      - name: Build release assets
+        shell: python
+        run: |
+          import base64, json, pathlib, shutil, zipfile
+          root = pathlib.Path('.')
+          out = pathlib.Path('release-assets')
+          out.mkdir()
+          manifest = json.loads(pathlib.Path('module.json').read_text())
+          assert manifest['id'] == 'pf1-sheet-inventory-sync'
+          assert manifest['version']
+          shutil.copyfile('module.json', out / 'module.json')
+          template = base64.b64decode(pathlib.Path('templates/party-inventory.xlsx.base64').read_text())
+          (out / 'Party.Inventory.Template.xlsx').write_bytes(template)
+          with zipfile.ZipFile(out / 'Party.Inventory.Template.xlsx') as workbook:
+              assert 'xl/workbook.xml' in workbook.namelist()
+          paths = [pathlib.Path('module.json'), pathlib.Path('README.md'), pathlib.Path('CHANGELOG.md')]
+          for folder in ['scripts', 'styles', 'google-apps-script', 'docs']:
+              paths.extend(p for p in pathlib.Path(folder).rglob('*') if p.is_file())
+          with zipfile.ZipFile(out / 'module.zip', 'w', zipfile.ZIP_DEFLATED) as package:
+              for p in paths:
+                  package.write(p, p.as_posix())
+          with zipfile.ZipFile(out / 'module.zip') as package:
+              assert 'module.json' in package.namelist()
+              assert not any(p.startswith(('tests/', 'templates/')) for p in package.namelist())
+          (out / 'version.txt').write_text(manifest['version'])
+          (out / 'notes.md').write_text('Foundry VTT 13 / Pathfinder 1e 11.x inventory sync with Google Sheets.\n\nIncludes reviewable two-way sync, GM loot transfers, named banks and stashes, independent wallets and a blank workbook.\n\nUse module.json as the Foundry install manifest. See the repository README and docs/setup.md for the Google connection.\n\nAutomated tests pass. Live integration still requires a test-world check. No campaign data is included.\n')
+      - name: Publish release if this version is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(cat release-assets/version.txt)"
+          tag="v${version}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists; leaving published assets unchanged."
+            exit 0
+          fi
+          gh release create "$tag" \
+            --target "$GITHUB_SHA" \
+            --title "PF1 Inventory Sheets Sync ${tag}" \
+            --notes-file release-assets/notes.md \
+            release-assets/module.json \
+            release-assets/module.zip \
+            release-assets/Party.Inventory.Template.xlsx
+
