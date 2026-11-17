@@ -1,0 +1,8 @@
+.pf1-sync { line-height: 1.5; }
+.pf1-sync label { display:block; margin:10px 0; }
+.pf1-sync input:not([type=checkbox]), .pf1-sync select, .pf1-sync textarea { width:100%; }
+.pf1-sync table { width:100%; }
+.pf1-sync th, .pf1-sync td { padding:6px; text-align:left; overflow-wrap:anywhere; }
+.pf1-sync .scroll { max-height:370px; overflow:auto; }
+.pf1-sync .hint { opacity:.8; }
+.pf1-sync-button { margin:4px 0; }

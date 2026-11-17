@@ -1,0 +1,36 @@
+{
+  "id": "pf1-sheet-inventory-sync",
+  "title": "PF1 Inventory · Sheets Sync",
+  "description": "Preview and reconcile Pathfinder 1 inventories with a Google Sheet.",
+  "version": "0.2.0",
+  "authors": [
+    {
+      "name": "Sally Coventry"
+    }
+  ],
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13",
+    "maximum": "13"
+  },
+  "relationships": {
+    "systems": [
+      {
+        "id": "pf1",
+        "type": "system",
+        "compatibility": {
+          "minimum": "11"
+        }
+      }
+    ]
+  },
+  "esmodules": [
+    "scripts/module.mjs"
+  ],
+  "styles": [
+    "styles/sync.css"
+  ],
+  "url": "https://github.com/saluce/Foundry-PF1e-Sheets",
+  "manifest": "https://github.com/saluce/Foundry-PF1e-Sheets/releases/latest/download/module.json",
+  "download": "https://github.com/saluce/Foundry-PF1e-Sheets/releases/download/v0.2.0/module.zip"
+}
