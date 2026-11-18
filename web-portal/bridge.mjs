@@ -7,6 +7,7 @@ export function bridge(ledger,body){
   ledger.transaction(()=>{
     switch(body.action){
       case 'read':break;
+      case 'healthApplied':{if(!Array.isArray(body.health)||body.health.length>500)fail('Invalid health acknowledgement.');const current=ledger.bridgeState().characterHealth;for(const raw of body.health){const h=current.find(h=>h.owner===raw.owner);if(!h||h.version!==raw.version||h.value!==raw.value||h.temp!==raw.temp)fail('Website HP changed during sync. Preview again.',409);}ledger.audit('Foundry','synced character HP',{characters:body.health.map(({owner,value,temp})=>({owner,value,temp}))});break;}
       case 'commit':{
         if(body.revision!==before.revision)fail('The website changed. Preview again.',409);
         if(!Array.isArray(body.rows)||body.rows.length>10000)fail('Invalid inventory rows.');const rows=body.rows.map(cleanRow),ids=new Set(),wallets=new Set();

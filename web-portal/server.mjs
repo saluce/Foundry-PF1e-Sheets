@@ -40,7 +40,7 @@ export function createPortal({dataDir,dbFile,origin='',lookupService=lookup}={})
         json(res,bridge(ledger,data));return;
       }
       if(req.method==='GET'&&!route.startsWith('/api/')){
-        const files={'/':['index.html','text/html'],'/app.mjs':['app.mjs','text/javascript'],'/features.mjs':['features.mjs','text/javascript'],'/style.css':['style.css','text/css'],'/favicon.svg':['favicon.svg','image/svg+xml']};const selected=files[route];if(!selected)fail('Page not found.',404);res.writeHead(200,{'Content-Type':selected[1]+'; charset=utf-8'});res.end(fs.readFileSync(path.join(STATIC,selected[0])));return;
+        const files={'/':['index.html','text/html'],'/app.mjs':['app.mjs','text/javascript'],'/features.mjs':['features.mjs','text/javascript'],'/character-ui.mjs':['character-ui.mjs','text/javascript'],'/pcgen.mjs':['pcgen.mjs','text/javascript'],'/style.css':['style.css','text/css'],'/favicon.svg':['favicon.svg','image/svg+xml']};const selected=files[route];if(!selected)fail('Page not found.',404);res.writeHead(200,{'Content-Type':selected[1]+'; charset=utf-8'});res.end(fs.readFileSync(path.join(STATIC,selected[0])));return;
       }
       if(req.method==='GET'&&route==='/api/status'){json(res,{application:'pf1-party-ledger',needsSetup:!!bootstrapToken});return;}
       const user=session(req);

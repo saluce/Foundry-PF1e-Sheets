@@ -1,3 +1,4 @@
+import {createHealthFeed} from './health.mjs';
 import {ID, escapeHTML as e, indexRows, reconcile, resolvePlan, convertLegacy, same} from "./core.mjs";
 import {assertGM, mappedActors, snapshot, validateApply, applyRows} from "./foundry.mjs";
 import {tradeDialog} from "./trade.mjs";
@@ -6,11 +7,11 @@ import {lookupDialog} from './lookup.mjs';
 import {inventoryConnection,sourceStateKey} from './connection.mjs';
 
 let busy = false;
-const perWorld = new Set(["baseline","refs","binding","privacySchema"]);
+const perWorld = new Set(["baseline","refs","binding","privacySchema","healthBaseline","healthEnabled"]);
 const stateKey=()=>sourceStateKey(game.world.id,game.settings.get(ID,'backend'));
 const setting = key => {
   const value=game.settings.get(ID,key);
-  return perWorld.has(key) ? value[stateKey()] ?? (key === "baseline"?[]:key === "binding"?"":key==='privacySchema'?0:{}) : value;
+  return perWorld.has(key) ? value[stateKey()] ?? (key === "baseline"?[]:key === "binding"?"":key==='privacySchema'?0:key==='healthEnabled'?false:{}) : value;
 };
 const save = (key,value) => game.settings.set(ID,key,perWorld.has(key)?{...game.settings.get(ID,key),[stateKey()]:value}:value);
 function notifyError(err) { console.error(`${ID} | Operation failed; private payloads are not logged.`); ui.notifications.error(err.message); }
@@ -45,10 +46,11 @@ Hooks.once("init", () => {
   game.settings.register(ID,'portalToken',{name:'Website connection secret (GM browser only)',hint:'Generate this at the website GM desk. Keep it private.',scope:'client',config:true,type:String,default:''});
   game.settings.register(ID,"endpoint", {name:"Google Sheets connection URL",hint:"The /exec URL from the supplied Google Apps Script deployment.",scope:"client",config:true,type:String,default:""});
   game.settings.register(ID,"token", {name:"Connection secret (GM browser only)",hint:"The secret from Apps Script. This is stored in this browser; do not share it with players.",scope:"client",config:true,type:String,default:""});
-  for (const key of ["mapping","baseline","refs","binding","privacySchema"]) game.settings.register(ID,key,{scope:key === "mapping"?"world":"client",config:false,type:Object,default:{},restricted:true});
+  for (const key of ["mapping","baseline","refs","binding","privacySchema","healthBaseline","healthEnabled"]) game.settings.register(ID,key,{scope:key === "mapping"?"world":"client",config:false,type:Object,default:{},restricted:true});
 });
 Hooks.once("ready", () => {
   game.modules.get(ID).api = {open:openPanel};
+  if(game.user?.isGM)healthFeed.start();
 });
 Hooks.on("renderActorDirectory", (_app, html) => {
   if (!game.user?.isGM || game.system.id !== "pf1") return;
@@ -65,6 +67,8 @@ function openPanel() {
     <p>Preview changes before applying them. Removing sheet rows never deletes in-game items. Foundry trades, splits and spent items update the sheet after review.</p>
     <p>New sheet items become basic loot entries. Existing items keep their Pathfinder rules and actions.</p>`, {
     mapping:{label:"Choose owners / actors",callback:()=>chooseMapping().catch(notifyError)},
+    health:{label:"Review website HP feed",callback:()=>{if(setting('backend')!=='portal')return ui.notifications.warn('HP feed requires the website connection.');healthFeed.preview();}},
+    stopHealth:{label:"Stop live HP feed",callback:()=>healthFeed.stop().catch(notifyError)},
     sync:{label:"Preview sync",callback:()=>exclusive(preview).catch(notifyError)},
     trade:{label:"Distribute loot",callback:()=>readSheet().then(s=>tradeDialog(exclusive,s.locations,prepareTransfer)).catch(notifyError)},
     secrets:{label:'GM item details / reveal',callback:()=>chooseGMItem().catch(notifyError)},
@@ -242,3 +246,5 @@ function legacyDialog() {
     }).catch(notifyError)},cancel:{label:"Cancel"}
   });
 }
+
+const healthFeed=createHealthFeed({read:readSheet,request,mapping:()=>setting('mapping'),baseline:()=>setting('healthBaseline'),saveBaseline:value=>save('healthBaseline',value),enabled:()=>setting('backend')==='portal'&&setting('healthEnabled')===true,setEnabled:value=>save('healthEnabled',value),dialog,root,e,notifyError});

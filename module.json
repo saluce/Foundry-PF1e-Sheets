@@ -1,8 +1,8 @@
 {
   "id": "pf1-sheet-inventory-sync",
   "title": "PF1 Inventory · Sheets Sync",
-  "description": "Preview and reconcile Pathfinder 1 inventories with a Google Sheet.",
-  "version": "0.6.0",
+  "description": "PCGen character sheets, live website HP feed and reviewable Pathfinder 1 inventory sync.",
+  "version": "0.7.0",
   "authors": [
     {
       "name": "Sally Coventry"
@@ -32,5 +32,5 @@
   ],
   "url": "https://github.com/saluce/Foundry-PF1e-Sheets",
   "manifest": "https://github.com/saluce/Foundry-PF1e-Sheets/releases/latest/download/module.json",
-  "download": "https://github.com/saluce/Foundry-PF1e-Sheets/releases/download/v0.6.0/module.zip"
+  "download": "https://github.com/saluce/Foundry-PF1e-Sheets/releases/download/v0.7.0/module.zip"
 }

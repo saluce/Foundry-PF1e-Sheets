@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0
+
+- Character hub with PCGen .pcg / OpenRPG / 3eProfiler XML imports and review before saving.
+- Combat, skills, spells, features and equipment sections; separate live loot ledger.
+- Current/temporary HP, verified totals, conditions and manual spell/class resource counters.
+- Assignment-based sheet access, stale-write protection and private backup support.
+- Reviewed start for a five-second website-to-Foundry HP feed, with linked/unlinked token support.
+- Feed pauses on native Foundry changes; calculated maximum HP stays in Foundry.
+
+
 ## 0.6.0
 
 - Character selection on invitations, optional GM approval, personal settings and read-only player previews.

@@ -1,0 +1,29 @@
+import {fail,text} from './store.mjs';
+const number=(v,min=-10000,max=100000)=>{if(v===null||v===undefined||v==='')return null;if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max)fail('Enter a valid sheet number.');return v;};
+const counters=values=>{if(!Array.isArray(values||[])||(values||[]).length>50)fail('Use at most 50 resource counters.');return (values||[]).map(v=>{const max=number(v.max,0),remaining=number(v.remaining,0);if(max===null||remaining===null||remaining>max)fail('Resource remaining must be between zero and its maximum.');return {name:str(v.name,120),max,remaining};});};
+const hpNumber=(v,min=-10000)=>{const n=number(v,min);if(n!==null&&!Number.isInteger(n))fail('HP must be a whole number.');return n;};
+const str=(v,max=20000)=>v==null?'':text(String(v),max);
+export function cleanCharacter(raw){
+ if(!raw||typeof raw!=='object'||Array.isArray(raw))fail('Choose a supported PCGen character.');
+ const out={};for(const k of ['name','race','className','alignment','gender','size','speed','notes','sourceFormat','spells'])out[k]=str(raw[k],k==='notes'||k==='spells'?60000:250);
+ if(!out.name)fail('The import needs a character name.');for(const k of ['level','hp','ac'])out[k]=k==='hp'?hpNumber(raw[k],0):number(raw[k],0);
+ out.abilities={};for(const k of ['str','dex','con','int','wis','cha'])out.abilities[k]=number(raw.abilities?.[k],0,1000);
+ const list=(key,convert)=>{if(!Array.isArray(raw[key]||[])||(raw[key]||[]).length>1500)fail('Too many '+key+' entries.');return (raw[key]||[]).map(convert);};
+ out.feats=list('feats',v=>str(v,2000));out.languages=list('languages',v=>str(v,250));out.warnings=list('warnings',v=>str(v,2000));
+ out.skills=list('skills',v=>({name:str(v.name,250),Mod:str(v.Mod??v.mod,100),Rank:str(v.Rank??v.rank,100),MiscMod:str(v.MiscMod??v.misc,100)}));
+ out.weapons=list('weapons',v=>({name:str(v.name,250),attackBonus:str(v.attackBonus,250),damage:str(v.damage,250),original:str(v.original,2000)}));
+ out.equipment=list('equipment',v=>({name:str(v.name,250),quantity:number(v.quantity,0),weight:number(v.weight,0)}));
+ out.raw={};const entries=Object.entries(raw.raw||{});if(entries.length>3000)fail('Too many PCGen fields.');for(const [key,value]of entries)if(/^[\w :/()+.-]{1,100}$/.test(key))out.raw[key]=str(value,10000);
+ if(JSON.stringify(out).length>1000000)fail('Character sheet is too large.');return out;
+}
+export function installCharacters(Ledger){const p=Ledger.prototype;
+ const exportBundle=p.exportBundle,importBundle=p.importBundle,bridgeState=p.bridgeState;
+ p.bridgeState=function(){return {...bridgeState.call(this),characterHealth:this.characterSheets({role:'gm'}).map(s=>({owner:s.owner,version:s.version,value:s.play.hp,temp:s.play.tempHp??0,max:s.totals.maxHp??s.character.hp??null}))};};
+ p.exportBundle=function(){return {...exportBundle.call(this),characterSheets:this.characterSheets({role:'gm'})};};
+ p.importBundle=function(bundle){return this.transaction(()=>{const result=importBundle.call(this,bundle);if(!Array.isArray(bundle.characterSheets||[])||(bundle.characterSheets||[]).length>500)fail('Invalid character sheet backup.');const seen=new Set();for(const raw of bundle.characterSheets||[]){const owner=text(raw.owner,120);if(owner==='Party Loot'||!this.owners().includes(owner)||seen.has(owner))fail('Invalid character assignment in backup.');seen.add(owner);this.saveCharacter({id:'restore',role:'gm'},{owner,version:0,character:raw.character,fileName:raw.fileName||'Restored sheet'});this.saveCharacter({id:'restore',role:'gm'},{owner,version:1,play:raw.play||{},totals:raw.totals||{}});}return result;});};
+ p.initCharacters=function(){this.db.exec('CREATE TABLE IF NOT EXISTS character_sheets(owner TEXT PRIMARY KEY REFERENCES owners(name),body TEXT NOT NULL,version INTEGER NOT NULL)');};
+ p.characterSheets=function(user){return this.db.prepare('SELECT body FROM character_sheets').all().map(r=>JSON.parse(r.body)).filter(s=>user.role==='gm'||this.grantOwners(user).includes(s.owner));};
+ p.saveCharacter=function(user,data){const owner=text(data.owner,120);if(owner==='Party Loot'||!this.owners().includes(owner)||!this.grantOwners(user).includes(owner))fail('Import into one of your assigned characters.',403);const stored=this.db.prepare('SELECT body,version FROM character_sheets WHERE owner=?').get(owner),old=stored?JSON.parse(stored.body):null;if((stored?.version||0)!==data.version)fail('This character sheet changed. Refresh before saving.',409);
+ return this.transaction(()=>{let next;if(data.character){const character=cleanCharacter(data.character);next={owner,character,fileName:str(data.fileName,250),importedAt:new Date().toISOString(),importedBy:user.id,play:old?.play?{...old.play,hp:old.play.hp??character.hp}:{hp:character.hp,tempHp:0,conditions:'',resources:'',counters:[]},totals:old?.totals||{}};}else{if(!old)fail('Import a character first.');next={...old};if(data.play)next.play={hp:hpNumber(data.play.hp),tempHp:hpNumber(data.play.tempHp,0),conditions:str(data.play.conditions,4000),resources:str(data.play.resources,10000),counters:counters(data.play.counters??old.play.counters)};if(data.totals){next.totals={};for(const k of ['maxHp','ac','touchAc','flatAc','fort','reflex','will','bab','initiative','cmb','cmd'])next.totals[k]=k==='maxHp'?hpNumber(data.totals[k],0):number(data.totals[k]);}}
+ next.version=(stored?.version||0)+1;next.updatedAt=new Date().toISOString();this.db.prepare('INSERT OR REPLACE INTO character_sheets VALUES (?,?,?)').run(owner,JSON.stringify(next),next.version);this.audit(user.id,data.character?'imported character sheet':'updated character sheet',{owner,before:old?{version:old.version,play:old.play,totals:old.totals}:null,after:{version:next.version,play:next.play,totals:next.totals},fileName:data.character?next.fileName:undefined});this.bump();return next;});};
+}

@@ -6,6 +6,7 @@ export function featureGet({route,ledger,user,effective,preview,json}){
   return false;
 }
 export async function featurePost({route,data,ledger,user,json,lookupService,limit}){
+  if(route==='/api/character-sheet'){json({ok:true,sheet:ledger.saveCharacter(user,data)});return true;}
   if(route==='/api/preferences'){ledger.savePreferences(user,data);json({ok:true});return true;}
   if(route==='/api/note'){const note=ledger.saveNote(user,data);json({ok:true,id:note.id});return true;}
   if(route==='/api/game-session'){const session=ledger.addGameSession(user,data);json({ok:true,session});return true;}
