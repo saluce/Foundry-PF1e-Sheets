@@ -1,3 +1,4 @@
+import {installCommunity} from './community.mjs';
 import {installHub} from './hub.mjs';
 import {gameDatabase} from './games.mjs';
 import {installCharacters} from './characters.mjs';
@@ -87,3 +88,5 @@ installFeatures(Ledger,{fail,text,hash});
 installCharacters(Ledger);
 
 installHub(Ledger);
+
+installCommunity(Ledger);

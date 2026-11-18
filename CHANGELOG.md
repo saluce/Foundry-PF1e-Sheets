@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.10.0 — Your company
+
+- Right-hand party/NPC panel, mobile drawer and confirmed portrait drop-to-trade.
+- GM-controlled NPC cards with private inventories and GM-only offer acceptance.
+- Character portraits from an original built-in gallery or cropped JPEG/PNG/WebP uploads.
+- Server-validated PNG storage inside game backups, separate from build and HP versions.
+- Resumable guided character setup, including required portraits and approval waiting states.
+- Login release updates, role-specific GM announcements and persistent required-action links.
+- Custom task confirmations, notice editing/retirement and account-level software-update receipts.
+- Private image access, portrait-aware readiness checks and larger GM backup imports.
+
+
 ## 0.9.0 — Session readiness
 
 - Role-specific session setup checklists with automatic checks and saved manual confirmations.

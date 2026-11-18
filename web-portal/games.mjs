@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-const tables=['meta','owners','locations','rows','private_rows','lineages','grants','invites','trades','audit','item_details','notebooks','game_sessions','preferences','reviews','invite_choices','character_sheets','characters','tributes','build_proposals'];
+const tables=['meta','owners','locations','rows','private_rows','lineages','grants','invites','trades','audit','item_details','notebooks','game_sessions','preferences','reviews','invite_choices','character_sheets','characters','tributes','build_proposals','actor_profiles','portraits','notices','notice_receipts'];
 const contexts=new WeakMap();
 export function gameDatabase(raw,gameId='default'){
  if(!/^[a-zA-Z0-9_-]{1,64}$/.test(gameId))throw Error('Invalid game ID.');
