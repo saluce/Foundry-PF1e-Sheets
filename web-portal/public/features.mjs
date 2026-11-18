@@ -1,7 +1,8 @@
+const checklistModule=await import('/checklist-ui.mjs').catch(()=>null);
 const hubModule=await import('/hub-ui.mjs').catch(()=>null);
 const characterModule=await import('/character-ui.mjs').catch(()=>null);
 export function createFeatureUI(c){
-  const characterUI=characterModule?.createCharacterUI(c);const hubUI=hubModule?.createHubUI(c);
+  const characterUI=characterModule?.createCharacterUI(c);const hubUI=hubModule?.createHubUI(c);const checklistUI=checklistModule?.createChecklistUI(c);
   const {e,fmt,api,show,toast,done}=c,s=()=>c.state(),gm=()=>s().user.role==='gm',editing=()=>!s().preview;
   const detail=id=>s().itemDetails.find(d=>d.id===id),row=id=>s().rows.find(r=>r.id===id),opt=(values,value)=>values.map(v=>`<option value="${e(v)}" ${v===value?'selected':''}>${e(v)}</option>`).join('');
   const main=()=>document.querySelector('#page');
@@ -16,7 +17,7 @@ export function createFeatureUI(c){
     else if(c.page()==='inventory')enhanceTable();
     if(c.page()==='accounts'&&gm())setTimeout(enhanceAccounts,100);
     if(c.page()==='settings'&&gm())setTimeout(enhanceSettings,100);
-    characterUI?.enhance();hubUI?.enhance();
+    characterUI?.enhance();hubUI?.enhance();checklistUI?.enhance();
     if(s().preview)document.querySelectorAll('[data-action=claim],[data-action=password]').forEach(b=>b.hidden=true);bindDropTargets();
   }
   function enhanceAccounts(){if(c.page()!=='accounts')return;const buttons=main().querySelectorAll('[data-action=account]');if(!buttons.length&&main().textContent.includes('Opening')){setTimeout(enhanceAccounts,100);return;}for(const b of buttons)if(!b.parentElement.querySelector('[data-action=f-preview]')){const preview=nav('View as player','f-preview');preview.className='row-button';preview.dataset.id=b.dataset.id;b.after(preview);}}

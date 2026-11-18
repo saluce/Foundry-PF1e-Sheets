@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.0 — Session readiness
+
+- Role-specific session setup checklists with automatic checks and saved manual confirmations.
+- Separate progress per game, account, character and campaign session.
+- GM Foundry/voice/inventory requirements and privacy-preserving party readiness overview.
+- Direct links from checklist steps to the relevant hub pages.
+- Hosting and mapping confirmations invalidate when the website or connection changes.
+- Recent authenticated Foundry contact is reported separately from manual HP-feed verification.
+
+
 ## 0.8.0 — Wayfinder’s Rest
 
 - Sheet-first player hub with inventory tabs, GM blank/import character creation and reviewed player build edits.
