@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0 — Wayfinder’s Rest
+
+- Sheet-first player hub with inventory tabs, GM blank/import character creation and reviewed player build edits.
+- Separate games with shared accounts, per-game roles, invitations, private data and Foundry connections.
+- Read-only memorial sheets, recorded causes of death, party tributes, NPC recollections and GM restoration.
+- Persistent isolated test games with a normally invited/imported/reviewed player and private password setup.
+- Light, Charcoal Dark, OLED Dark and System themes, selectable before login and remembered per account.
+- Original woodland login art: glowing night campfire or a doused daylight fire with smoke.
+- Inactive characters excluded from sync; restored characters require fresh HP review.
+- Transactional legacy migration and game-specific portable backup support.
+
+
 ## 0.7.0
 
 - Character hub with PCGen .pcg / OpenRPG / 3eProfiler XML imports and review before saving.

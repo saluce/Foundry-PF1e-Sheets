@@ -1,3 +1,5 @@
+import {installHub} from './hub.mjs';
+import {gameDatabase} from './games.mjs';
 import {installCharacters} from './characters.mjs';
 import {DatabaseSync} from 'node:sqlite';
 import {randomUUID,randomBytes,createHash,scryptSync,timingSafeEqual} from 'node:crypto';
@@ -18,9 +20,9 @@ const cleanPrivate=r=>({...cleanGMRecord(r,r.id),owner:text(r.owner||'',120),nam
 export function cleanRow(raw){const row=normalize(raw);if(row.kind==='wallet')for(const k of ['pp','gp','sp','cp'])if(raw[k]===null)row[k]=null;for(const k of ['name','owner','storage','id'])if(row[k])text(row[k],k==='name'?250:256);if(row.notes?.length>10000||row.properties?.length>10000)fail('Notes or properties are too long.');return row;}
 
 export class Ledger {
-  constructor(file){
+  constructor(file,{gameId='default',raw=null}={}){
     if(file!==':memory:'){mkdirSync(path.dirname(file),{recursive:true,mode:0o700});}
-    this.file=file;this.db=new DatabaseSync(file);if(file!==':memory:')try{chmodSync(file,0o600);}catch{}
+    this.file=file;this.gameId=gameId;this.ownsDatabase=!raw;this.rawDB=raw||new DatabaseSync(file);this.db=gameDatabase(this.rawDB,gameId);this.db.context.ledgers.set(gameId,this);if(file!==':memory:')try{chmodSync(file,0o600);}catch{}
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS owners(name TEXT PRIMARY KEY);
@@ -28,9 +30,7 @@ export class Ledger {
       CREATE TABLE IF NOT EXISTS rows(id TEXT PRIMARY KEY,body TEXT NOT NULL,version INTEGER NOT NULL DEFAULT 1);
       CREATE TABLE IF NOT EXISTS private_rows(id TEXT PRIMARY KEY,body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS lineages(target_id TEXT PRIMARY KEY,source_id TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,username TEXT UNIQUE COLLATE NOCASE,role TEXT NOT NULL,password TEXT NOT NULL,disabled INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS grants(user_id TEXT NOT NULL REFERENCES users(id),owner TEXT NOT NULL REFERENCES owners(name),PRIMARY KEY(user_id,owner));
-      CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),csrf TEXT NOT NULL,expires INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS invites(token TEXT PRIMARY KEY,owners TEXT NOT NULL,expires INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS trades(id TEXT PRIMARY KEY,body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT,at TEXT NOT NULL,actor TEXT NOT NULL,action TEXT NOT NULL,body TEXT NOT NULL);`);
@@ -39,9 +39,9 @@ export class Ledger {
     this.initFeatures();this.initCharacters();
   }
   get(k){return this.db.prepare('SELECT value FROM meta WHERE key=?').get(k)?.value;}
-  set(k,v){this.db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)').run(k,String(v));}
+  set(k,v){this.db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)').run(k,String(v));if(k==='title')this.rawDB.prepare('UPDATE games SET name=? WHERE id=?').run(String(v),this.gameId);}
   bump(gm=false){const k=gm?'gmRevision':'revision';this.set(k,Number(this.get(k))+1);}
-  transaction(fn){if(this.inTransaction)return fn();this.db.exec('BEGIN IMMEDIATE');this.inTransaction=true;try{const r=fn();this.db.exec('COMMIT');return r;}catch(err){this.db.exec('ROLLBACK');throw err;}finally{this.inTransaction=false;}}
+  transaction(fn){if(this.db.context.transaction)return fn();this.db.exec('BEGIN IMMEDIATE');this.inTransaction=true;this.db.context.transaction=true;try{const r=fn();this.db.exec('COMMIT');return r;}catch(err){this.db.exec('ROLLBACK');throw err;}finally{this.inTransaction=false;this.db.context.transaction=false;}}
   audit(actor,action,body){this.db.prepare('INSERT INTO audit(at,actor,action,body) VALUES (?,?,?,?)').run(new Date().toISOString(),actor,action,JSON.stringify(body));}
   rows(){return this.db.prepare('SELECT body,version FROM rows ORDER BY rowid').all().map(r=>({...JSON.parse(r.body),version:r.version}));}
   row(id){const r=this.db.prepare('SELECT body,version FROM rows WHERE id=?').get(id);if(!r)fail('Item no longer exists.',404);return {...JSON.parse(r.body),version:r.version};}
@@ -80,8 +80,10 @@ export class Ledger {
   addInventory(user,name){this.gm(user);name=text(name,120);if(!name)fail('Enter a character or loot inventory name.');this.db.prepare('INSERT OR IGNORE INTO owners VALUES (?)').run(name);this.bump();}
   addRow(user,raw){if(!this.owners().includes(raw.owner)||!this.locations().includes(raw.storage))fail('Choose an existing inventory and location.');if(!this.canEdit(user,raw))fail('You can add items only to your assigned characters.',403);return this.transaction(()=>{const row=this.putRow({...raw,id:randomUUID()});if(row.kind==='wallet'&&this.rows().filter(r=>r.kind==='wallet'&&r.owner===row.owner&&r.storage===row.storage).length>1)fail('That inventory already has a wallet at this location.');if(row.kind==='item')this.putPrivate({id:row.id,owner:row.owner,trueName:row.name,actualValue:null});this.bump();this.audit(user.id,'add row',{id:row.id});return row;});}
   exportBundle(){return {schema:1,title:this.get('title'),owners:this.owners(),locations:this.locations(),rows:this.rows().map(({version,...r})=>r),privateRecords:this.db.prepare('SELECT body FROM private_rows').all().map(r=>JSON.parse(r.body)),migrationReview:JSON.parse(this.get('review')||'[]'),lineages:this.db.prepare('SELECT source_id AS sourceId,target_id AS targetId FROM lineages').all().map(({sourceId,targetId})=>({sourceId,targetId}))};}
-  close(){this.db.close();}
+  close(){if(this.ownsDatabase)this.db.close();}
 }
 installFeatures(Ledger,{fail,text,hash});
 
 installCharacters(Ledger);
+
+installHub(Ledger);

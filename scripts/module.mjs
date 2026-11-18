@@ -160,7 +160,9 @@ async function chooseMapping() {
 }
 
 async function preview() {
-  const mapping = setting("mapping"); mappedActors(mapping);
+  const configuredMapping=setting("mapping");
+  const initialSheet=await readSheet();
+  const mapping=Object.fromEntries(Object.entries(configuredMapping).filter(([owner])=>!initialSheet.inactiveOwners.includes(owner)));mappedActors(mapping);
   if (!Object.keys(mapping).length) throw Error("Choose owners / actors first.");
   let sheet = await readSheet();
   const base = setting("baseline").map(r=>setting('privacySchema')===3?r:{...r,notes:'',properties:''});
@@ -197,7 +199,7 @@ async function preview() {
       validateApply(desired,mapping,local.links,{allowTransfers:setting('backend')==='portal'});
       indexRows([...sheet.rows.filter(r=>!Object.hasOwn(mapping,r.owner)),...desired]);
       // Any intervening inventory edit invalidates the preview; unrelated actor changes do not.
-      if (!same(mapping,setting("mapping")) || !same(local.rows,snapshot(mapping,selected,base,refs).rows)) throw Error("Foundry inventory changed since preview. Preview again.");
+      if (!same(configuredMapping,setting("mapping")) || !same(local.rows,snapshot(mapping,selected,base,refs).rows)) throw Error("Foundry inventory changed since preview. Preview again.");
       const latest=await readSheet();
       if(latest.locations && desired.some(r=>!latest.locations.includes(r.storage))) throw Error('Locations changed since preview. Preview again.');
       if(latest.revision!==sheet.revision) throw Error("The sheet changed since preview. Preview again.");

@@ -66,7 +66,7 @@ jobs:
               for p in server_paths:
                   package.write(p, p.as_posix())
           (out / 'version.txt').write_text(manifest['version'])
-          (out / 'notes.md').write_text('Foundry VTT 13 / Pathfinder 1e 11.x inventory sync with Google Sheets.\n\nIncludes PCGen character sheets, private journals, player workflows, reviewed live HP feed, reviewable two-way sync, GM loot transfers, named banks and stashes, independent wallets, a separate private GM store, selective reveals, confirmed d20PFSRD weight/price lookup, the optional PC-hosted Party Ledger website and two blank workbooks.\n\nUse module.json as the Foundry install manifest. See the repository README and docs/setup.md for the Google connection.\n\nAutomated tests pass. Live integration still requires a test-world check. No campaign data is included.\n')
+          (out / 'notes.md').write_text('Foundry VTT 13 / Pathfinder 1e 11.x inventory sync with Google Sheets.\n\nIncludes PCGen character sheets, private journals, player workflows, reviewed live HP feed, reviewable two-way sync, GM loot transfers, named banks and stashes, independent wallets, a separate private GM store, selective reveals, confirmed d20PFSRD weight/price lookup, the optional PC-hosted Party Ledger website and two blank workbooks.\n\nBack up the complete website data directory and stop the old server before the 0.8 game migration. Use module.json as the Foundry install manifest. See the repository README and docs/setup.md for the Google connection.\n\nAutomated tests pass. Live integration still requires a test-world check. No campaign data is included.\n')
       - name: Publish release if this version is new
         env:
           GH_TOKEN: ${{ github.token }}
@@ -82,7 +82,7 @@ jobs:
           fi
           gh release create "$tag" \
             --target "$GITHUB_SHA" \
-            --title "PF1 Inventory Sheets Sync ${tag}" \
+            --title "Wayfinder’s Rest ${tag}" \
             --notes-file release-assets/notes.md \
             release-assets/module.json \
             release-assets/module.zip \
