@@ -72,5 +72,5 @@ export function createFeatureUI(c){
     else if(a==='f-session')show('Add a campaign session','<label>Session title</label><input name="title" required maxlength="200"><label>Date</label><input type="date" name="date">','Create session',async f=>{await api('game-session',{title:f.get('title'),date:f.get('date')});await done('Session added. You can now link notes to it.');});
     else if(a==='f-follow-link'){if(b.dataset.kind==='item'&&row(id))view(id);else if(b.dataset.kind==='character'){c.select(id);c.setPage('inventory');c.render();}else if(b.dataset.kind==='location'){c.filterLocation(id);c.setPage('inventory');c.render();}else if(b.dataset.kind==='session'){c.setPage('f-notebook');c.render();const filter=main().querySelector('#session-filter');filter.value=id;filter.dispatchEvent(new Event('change'));}}
   }catch(err){toast(err.message);}});
-  return {enhance,enhanceTable,enhanceAccounts,enhanceSettings,invite,prepareInvitation,transfer};
+  return {enhance,enhanceTable(){enhanceTable();campaignUI?.enhanceInventory();},enhanceAccounts,enhanceSettings,invite,prepareInvitation,transfer};
 }

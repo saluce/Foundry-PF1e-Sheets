@@ -1,6 +1,6 @@
 # Wayfinder’s Rest · PF1 Sync
 
-Core preview 0.11.0-preview.1 for Foundry VTT 13 / Pathfinder 1e 11.x. Editable character inventories, party loot, separate bank wallets and reviewable two-way sync.
+Core preview 0.11.0-preview.2 for Foundry VTT 13 / Pathfinder 1e 11.x. Editable character inventories, party loot, separate bank wallets and reviewable two-way sync.
 
 Install manifest: https://github.com/saluce/Foundry-PF1e-Sheets/releases/latest/download/module.json
 
@@ -8,7 +8,7 @@ Download both blank templates from [the latest release](https://github.com/saluc
 
 GM-only names, values, properties and notes stay in a separate private file. Reveal name, value and properties independently; notes never reveal. GM-managed locations and partial-stack transfers preserve private record links. Existing PF1 mechanics retain normal Foundry visibility. Confirm d20PFSRD matches to fill weights and full purchase prices, with private prices by default, variant choices and explicit pack conversion.
 
-Run `node --test tests/*.test.mjs web-portal/tests/*.test.mjs`. All 154 checks pass locally; live Google/Foundry integration still needs a test-world check. Back up your world before first use. No campaign inventories or secrets are included here.
+Run `node --test tests/*.test.mjs web-portal/tests/*.test.mjs`. All 174 checks pass locally; live Google/Foundry integration still needs a test-world check. Back up your world before first use. No campaign inventories or secrets are included here.
 
 ## Wayfinder’s Rest
 
@@ -24,4 +24,8 @@ Open Character sheets on the website to import PCGen .pcg or XML exports, track 
 
 ## Campaign core preview
 
-Core campaign workflows and 154 automated checks are included. This is a review build: browser visual QA and live Foundry combat/time relay testing are still pending. Foundry-dependent screens show a waiting sign until a GM world is connected. Do not mistake automated test coverage for live-world verification. See [implementation notes](docs/campaign-core-update.md).
+Core campaign workflows and 174 automated checks are included. This is a review build: browser visual QA and live Foundry combat/time relay testing are still pending. Foundry-dependent screens show a waiting sign until a GM world is connected. Do not mistake automated test coverage for live-world verification. See [implementation notes](docs/campaign-core-update.md).
+
+## Compact play update
+
+Preview 2 adds compact accessible action icons, persistent character tabs, a compact wallet with editable balances, capacity/load colours and PF1 movement reduction, level markers, reorderable personal navigation and GM desk pins. Obsidian access is GM-only. The main sheet has daily spell tiles with server-enforced preparation locks, open-slot preparation, approved conversion abilities, arcanist prepared choices, Quick Study costs, bonded-object use and logged GM overrides. Class/archetype exceptions and resource counters require GM review. Browser visual QA and live Foundry verification remain separate from the 174 automated checks.
