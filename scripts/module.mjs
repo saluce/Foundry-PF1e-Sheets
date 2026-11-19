@@ -1,3 +1,4 @@
+import {createCampaignFeed} from './campaign-feed.mjs';
 import {createHealthFeed} from './health.mjs';
 import {ID, escapeHTML as e, indexRows, reconcile, resolvePlan, convertLegacy, same} from "./core.mjs";
 import {assertGM, mappedActors, snapshot, validateApply, applyRows} from "./foundry.mjs";
@@ -50,7 +51,7 @@ Hooks.once("init", () => {
 });
 Hooks.once("ready", () => {
   game.modules.get(ID).api = {open:openPanel};
-  if(game.user?.isGM)healthFeed.start();
+  if(game.user?.isGM){healthFeed.start();campaignFeed.start();}
 });
 Hooks.on("renderActorDirectory", (_app, html) => {
   if (!game.user?.isGM || game.system.id !== "pf1") return;
@@ -250,3 +251,5 @@ function legacyDialog() {
 }
 
 const healthFeed=createHealthFeed({read:readSheet,request,mapping:()=>setting('mapping'),baseline:()=>setting('healthBaseline'),saveBaseline:value=>save('healthBaseline',value),enabled:()=>setting('backend')==='portal'&&setting('healthEnabled')===true,setEnabled:value=>save('healthEnabled',value),dialog,root,e,notifyError});
+
+const campaignFeed=createCampaignFeed({request,enabled:()=>setting('backend')==='portal'&&!!setting('portalToken'),mapping:()=>setting('mapping'),notify:message=>ui.notifications.warn(message)});

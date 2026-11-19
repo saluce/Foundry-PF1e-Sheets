@@ -1,6 +1,6 @@
 {
   "name": "pf1-party-ledger",
-  "version": "0.10.0",
+  "version": "0.11.0-preview.1",
   "private": true,
   "type": "module",
   "engines": {
