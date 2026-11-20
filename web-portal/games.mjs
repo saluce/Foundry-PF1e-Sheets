@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-const tables=['meta','owners','locations','rows','private_rows','lineages','grants','invites','trades','audit','item_details','notebooks','game_sessions','preferences','reviews','invite_choices','character_sheets','characters','tributes','build_proposals','actor_profiles','portraits','notices','notice_receipts'];
+const tables=['meta','owners','locations','rows','private_rows','lineages','grants','invites','trades','audit','item_details','notebooks','game_sessions','preferences','reviews','invite_choices','character_sheets','characters','tributes','build_proposals','actor_profiles','portraits','notices','notice_receipts','campaign_records'];
 const contexts=new WeakMap();
 export function gameDatabase(raw,gameId='default'){
  if(!/^[a-zA-Z0-9_-]{1,64}$/.test(gameId))throw Error('Invalid game ID.');
@@ -15,6 +15,7 @@ export function gameDatabase(raw,gameId='default'){
     CREATE TABLE IF NOT EXISTS account_preferences(user_id TEXT PRIMARY KEY REFERENCES accounts(id),theme TEXT NOT NULL DEFAULT 'system',last_game TEXT);
     CREATE TABLE IF NOT EXISTS password_setups(token TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES accounts(id),expires INTEGER NOT NULL);`);
    const cols=raw.prepare('PRAGMA table_info(sessions)').all();for(const [name,type]of [['view_as','TEXT'],['game_id',"TEXT NOT NULL DEFAULT 'default'"]])if(!cols.some(c=>c.name===name))raw.exec('ALTER TABLE sessions ADD COLUMN '+name+' '+type);
+   const sessionCols=raw.prepare('PRAGMA table_info(sessions)').all();if(!sessionCols.some(c=>c.name==='remembered'))raw.exec('ALTER TABLE sessions ADD COLUMN remembered INTEGER NOT NULL DEFAULT 0');if(!sessionCols.some(c=>c.name==='last_seen')){raw.exec('ALTER TABLE sessions ADD COLUMN last_seen INTEGER NOT NULL DEFAULT 0');raw.prepare('UPDATE sessions SET last_seen=?').run(Date.now());}
    const title=raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='meta'").get()?raw.prepare("SELECT value FROM meta WHERE key='title'").get()?.value:'My first game';
    raw.prepare('INSERT OR IGNORE INTO games(id,name) VALUES (?,?)').run('default',title||'My first game');
    for(const table of tables)if(raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table))raw.exec('ALTER TABLE '+table+' RENAME TO g_default_'+table);

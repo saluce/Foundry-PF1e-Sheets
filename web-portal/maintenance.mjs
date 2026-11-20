@@ -1,0 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {backup} from 'node:sqlite';
+import {gameLedger} from './hub.mjs';
+export function startMaintenance(root){let running=false;async function tick(force=false){if(running||root.file===':memory:')return;running=true;try{const settings=root.campaignSettings(),dir=path.join(path.dirname(root.file),'backups');fs.mkdirSync(dir,{recursive:true,mode:0o700});const files=fs.readdirSync(dir).filter(n=>/^auto-\d{13}\.sqlite$/.test(n)).sort(),last=files.length?Number(files.at(-1).slice(5,18)):0;if(force||Date.now()-last>=settings.backupHours*3600000){await backup(root.rawDB,path.join(dir,'auto-'+Date.now()+'.sqlite'));const next=fs.readdirSync(dir).filter(n=>/^auto-\d{13}\.sqlite$/.test(n)).sort();for(const name of next.slice(0,-settings.backupKeep))fs.unlinkSync(path.join(dir,name));}for(const {id}of root.rawDB.prepare('SELECT id FROM games').all()){const l=gameLedger(root,id),days=l.campaignSettings().logDays;if(days>0)l.db.prepare('DELETE FROM audit WHERE at<?').run(new Date(Date.now()-days*86400000).toISOString());}return status();}finally{running=false;}}
+ function status(){if(root.file===':memory:')return {last:null};const dir=path.join(path.dirname(root.file),'backups');let files=[];try{files=fs.readdirSync(dir).filter(n=>/^auto-\d{13}\.sqlite$/.test(n)).sort();}catch{}return {last:files.length?Number(files.at(-1).slice(5,18)):null,count:files.length};}
+ const timer=setInterval(()=>tick().catch(()=>{}),60000);timer.unref();return {tick,status,stop:()=>clearInterval(timer)};}

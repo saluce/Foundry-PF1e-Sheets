@@ -1,8 +1,10 @@
+const campaignModule=await import('/campaign-ui.mjs').catch(()=>null);
 const communityModule=await import('/community-ui.mjs').catch(()=>null);
 const checklistModule=await import('/checklist-ui.mjs').catch(()=>null);
 const hubModule=await import('/hub-ui.mjs').catch(()=>null);
 const characterModule=await import('/character-ui.mjs').catch(()=>null);
 export function createFeatureUI(c){
+  const campaignUI=campaignModule?.createCampaignUI(c);
   const communityUI=communityModule?.createCommunityUI({...c,transfer:(...args)=>transfer(...args)});
   const characterUI=characterModule?.createCharacterUI(c);const hubUI=hubModule?.createHubUI(c);const checklistUI=checklistModule?.createChecklistUI(c);
   const {e,fmt,api,show,toast,done}=c,s=()=>c.state(),gm=()=>s().user.role==='gm',editing=()=>!s().preview;
@@ -20,7 +22,7 @@ export function createFeatureUI(c){
     if(c.page()==='accounts'&&gm())setTimeout(enhanceAccounts,100);
     if(c.page()==='settings'&&gm())setTimeout(enhanceSettings,100);
     characterUI?.enhance();hubUI?.enhance();checklistUI?.enhance();
-    communityUI?.enhance();
+    communityUI?.enhance();campaignUI?.enhance();
     if(s().preview)document.querySelectorAll('[data-action=claim],[data-action=password]').forEach(b=>b.hidden=true);bindDropTargets();
   }
   function enhanceAccounts(){if(c.page()!=='accounts')return;const buttons=main().querySelectorAll('[data-action=account]');if(!buttons.length&&main().textContent.includes('Opening')){setTimeout(enhanceAccounts,100);return;}for(const b of buttons)if(!b.parentElement.querySelector('[data-action=f-preview]')){const preview=nav('View as player','f-preview');preview.className='row-button';preview.dataset.id=b.dataset.id;b.after(preview);}}
@@ -70,5 +72,5 @@ export function createFeatureUI(c){
     else if(a==='f-session')show('Add a campaign session','<label>Session title</label><input name="title" required maxlength="200"><label>Date</label><input type="date" name="date">','Create session',async f=>{await api('game-session',{title:f.get('title'),date:f.get('date')});await done('Session added. You can now link notes to it.');});
     else if(a==='f-follow-link'){if(b.dataset.kind==='item'&&row(id))view(id);else if(b.dataset.kind==='character'){c.select(id);c.setPage('inventory');c.render();}else if(b.dataset.kind==='location'){c.filterLocation(id);c.setPage('inventory');c.render();}else if(b.dataset.kind==='session'){c.setPage('f-notebook');c.render();const filter=main().querySelector('#session-filter');filter.value=id;filter.dispatchEvent(new Event('change'));}}
   }catch(err){toast(err.message);}});
-  return {enhance,enhanceTable,enhanceAccounts,enhanceSettings,invite,prepareInvitation,transfer};
+  return {updateLive(before){campaignUI?.updateLive(before);},enhance,enhanceTable(){enhanceTable();campaignUI?.enhanceInventory();},enhanceAccounts,enhanceSettings,invite,prepareInvitation,transfer};
 }

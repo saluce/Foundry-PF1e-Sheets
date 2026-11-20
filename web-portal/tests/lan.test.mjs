@@ -1,0 +1,10 @@
+import http from 'node:http';
+import test from "node:test";import assert from "node:assert/strict";import {createPortal} from "../server.mjs";
+test("LAN access requires explicit private HTTP origin and preserves host, origin, CSRF and session protection",async()=>{
+ for(const origin of ["http://192.168.0.138:4319","http://example.com","http://8.8.8.8"])assert.throws(()=>createPortal({dbFile:":memory:",origin,allowLanOrigin:!origin.includes("192.168")}),/HTTPS/);
+ const app=createPortal({dbFile:":memory:",origin:"http://192.168.0.138:4319",allowLanOrigin:true});await new Promise(r=>app.server.listen(0,"127.0.0.1",r));try{const url="http://127.0.0.1:"+app.server.address().port,origin="http://192.168.0.138:4319";
+ const request=(route,body,extra={})=>new Promise((resolve,reject)=>{const req=http.request(url+"/api/"+route,{method:body?"POST":"GET",headers:{Host:"192.168.0.138:4319",Origin:origin,"Content-Type":"application/json",...extra}},res=>{let text="";res.on("data",c=>text+=c);res.on("end",()=>resolve({status:res.statusCode,headers:{get:n=>{const v=res.headers[n];return Array.isArray(v)?v.join(";"):v;}},json:async()=>JSON.parse(text)}));});req.on("error",reject);req.end(body?JSON.stringify(body):undefined);});
+ assert.equal((await request("state")).status,401);assert.equal((await request("status",null,{Host:"evil.example"})).status,403);assert.equal((await request("setup",{token:app.bootstrapToken,username:"GM",password:"local test password"},{Origin:"http://evil.example"})).status,403);
+ const r=await request("setup",{token:app.bootstrapToken,username:"GM",password:"local test password"});assert.equal(r.status,200);const cookie=r.headers.get("set-cookie");assert.match(cookie,/HttpOnly/);assert.ok(!cookie.includes("; Secure"));const session=cookie.split(";")[0],data=await r.json();assert.equal((await request("state",null,{Cookie:session})).status,200);assert.equal((await request("theme",{theme:"oled"},{Cookie:session})).status,403);assert.equal((await request("theme",{theme:"oled"},{Cookie:session,"X-CSRF-Token":data.csrf})).status,200);
+ }finally{await app.close();}
+});

@@ -1,3 +1,7 @@
+import {installSpellPreparation} from './spell-preparation.mjs';
+import {installCarrying} from './carrying.mjs';
+import {installCampaign,installCalendar} from './campaign.mjs';
+import {installPlay} from './play.mjs';
 import {installCommunity} from './community.mjs';
 import {installHub} from './hub.mjs';
 import {gameDatabase} from './games.mjs';
@@ -90,3 +94,10 @@ installCharacters(Ledger);
 installHub(Ledger);
 
 installCommunity(Ledger);
+
+installCampaign(Ledger);
+installCalendar(Ledger);
+installPlay(Ledger);
+
+installSpellPreparation(Ledger);
+installCarrying(Ledger);
