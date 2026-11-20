@@ -1,3 +1,9 @@
+# Background refresh correction
+
+- Background polling patches live information without rebuilding the page.
+- Scroll positions, open sections and focus are retained when changed content updates.
+- In-flight replies cannot overwrite edits, navigation or a completed save.
+
 # Compact play preview 0.11.0-preview.2
 
 - Compact action icons, high-contrast interaction states, wallet and inventory totals.
@@ -5,7 +11,7 @@
 - Main-page preparation tiles and PF1 class feature exceptions with approval and resource checks.
 - Carrying capacity, carried coin weight, load colours and movement indicators.
 - Subtle portrait levels, live health percentage labels and strict GM-only Obsidian access.
-- 174 automated checks pass; real Foundry world verification remains pending.
+- 182 automated checks pass; real Foundry world verification remains pending.
 
 # Changelog
 
