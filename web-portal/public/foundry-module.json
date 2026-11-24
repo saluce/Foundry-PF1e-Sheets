@@ -1,0 +1,36 @@
+{
+  "id": "pf1-sheet-inventory-sync",
+  "title": "Wayfinder’s Rest · PF1 Sync",
+  "description": "PCGen character sheets, live website HP feed and reviewable Pathfinder 1 inventory sync.",
+  "version": "0.11.0-preview.15",
+  "authors": [
+    {
+      "name": "Sally Coventry"
+    }
+  ],
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13",
+    "maximum": "13"
+  },
+  "relationships": {
+    "systems": [
+      {
+        "id": "pf1",
+        "type": "system",
+        "compatibility": {
+          "minimum": "11"
+        }
+      }
+    ]
+  },
+  "esmodules": [
+    "scripts/module.mjs"
+  ],
+  "styles": [
+    "styles/sync.css"
+  ],
+  "url": "https://github.com/saluce/Foundry-PF1e-Sheets",
+  "manifest": "https://hub.saluce.co.uk/foundry/module.json",
+  "download": "https://hub.saluce.co.uk/foundry/module.zip"
+}
